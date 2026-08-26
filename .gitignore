@@ -1,0 +1,34 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Ortam değişkenleri ve gizli anahtarlar
+.env
+.env.local
+.env.*.local
+
+# Veritabanı dosyaları
+*.db
+*.sqlite3
+backend/omnisim.db
+
+# IDE & Editör ayarları
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# İşletim sistemi kalıntıları
+.DS_Store
+Thumbs.db
+
+# Loglar
+*.log

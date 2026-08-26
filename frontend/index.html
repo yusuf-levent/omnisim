@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OmniSim AI - İnteraktif Medikal Simülasyon</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- 1. Vaka seçim ekranı -->
+    <section id="screen-select" class="screen active">
+      <div class="hero-header">
+        <div class="badge">OmniSim Klinik Laboratuvarı</div>
+        <h1>OmniSim AI</h1>
+        <p class="subtitle">Hata yapmanın güvenli olduğu etkileşimli eğitim laboratuvarı</p>
+      </div>
+      <div id="scenario-list" class="scenario-grid"></div>
+    </section>
+
+    <!-- 2. Simülasyon ekranı -->
+    <section id="screen-sim" class="screen">
+      <div class="sim-layout">
+        <!-- Sol Panel: Monitör -->
+        <div class="vitals-panel">
+          <div class="panel-header">
+            <h3>Hasta Monitörü</h3>
+            <div class="live-indicator">
+              <span class="live-dot"></span> CANLI
+            </div>
+          </div>
+
+          <div class="vital-card">
+            <span class="vital-label">❤️ Nabız</span>
+            <span id="vital-nabiz" class="vital-value">--</span>
+          </div>
+          <div class="vital-card">
+            <span class="vital-label">🩸 Tansiyon</span>
+            <span id="vital-tansiyon" class="vital-value">--</span>
+          </div>
+          <div class="vital-card">
+            <span class="vital-label">🧠 Bilinç</span>
+            <span id="vital-bilinc" class="vital-value">--</span>
+          </div>
+
+          <div class="turn-badge">
+            Aşama: <span id="turn-count">0</span> / 6
+          </div>
+        </div>
+
+        <!-- Sağ Panel: Sohbet & Aksiyon -->
+        <div class="chat-panel">
+          <div id="chat-log" class="chat-log"></div>
+          <form id="action-form" class="action-form">
+            <input
+              id="action-input"
+              type="text"
+              placeholder="Müdahaleni yaz... (örn: Oksijen maskesi takıp EKG çekiyorum)"
+              autocomplete="off"
+            />
+            <button type="submit">Uygula</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Karne ekranı -->
+    <section id="screen-report" class="screen">
+      <div class="report-card">
+        <h2>Simülasyon Değerlendirmesi</h2>
+        <div class="score-circle">
+          <span id="report-score">--</span>
+          <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 500; margin-top: 4px;">/ 100 PUAN</span>
+        </div>
+        <div class="report-section">
+          <h4>✅ Güçlü Yönler</h4>
+          <p id="report-strengths"></p>
+        </div>
+        <div class="report-section">
+          <h4>⚠️ Gelişim Alanları / Hatalar</h4>
+          <p id="report-mistakes"></p>
+        </div>
+        <div class="report-section">
+          <h4>💡 Eğitmen Önerisi</h4>
+          <p id="report-suggestion"></p>
+        </div>
+        <button id="restart-btn">Farklı Bir Vaka Başlat</button>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
