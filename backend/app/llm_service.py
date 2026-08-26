@@ -1,19 +1,5 @@
-"""
-LLM ile konuşan tek katman. Bütün prompt gönderme / JSON parse etme mantığı
-burada toplanıyor - main.py bu detaylarla uğraşmıyor.
-
-Hızlı/ucuz bir model kullanıyoruz (örn. gpt-4o-mini) çünkü:
-- Karmaşık muhakeme gerekmiyor, sadece yapılandırılmış JSON üretimi.
-- Demo sırasında gecikme yaşamamak önemli.
-
-NOT: OPENAI_API_KEY ortam değişkenini .env dosyasına eklemen gerekiyor.
-Başka bir sağlayıcı kullanmak istersen (Anthropic, Gemini vb.) sadece bu
-dosyayı değiştirmen yeterli - geri kalan kod etkilenmez.
-"""
 import json
-
 from openai import OpenAI
-
 from config import settings
 
 client = OpenAI(
@@ -22,50 +8,54 @@ client = OpenAI(
 )
 MODEL = settings.LLM_MODEL
 
-def _call_llm(system_prompt: str, conversation: list[dict]) -> dict:
-    """
-    conversation: [{"role": "user"/"assistant", "content": "..."}]
-    Döndürür: parse edilmiş JSON dict.
-    """
-    messages = [{"role": "system", "content": system_prompt}] + conversation
 
+def _call_llm(system_prompt: str, conversation: list[dict]) -> dict:
+    messages = [{"role": "system", "content": system_prompt}] + conversation
     response = client.chat.completions.create(
         model=MODEL,
         messages=messages,
         response_format={"type": "json_object"},
         temperature=0.8,
     )
-    content = response.choices[0].message.content
-    return json.loads(content)
+    return json.loads(response.choices[0].message.content)
 
 
 def start_scenario(scenario_prompt: str) -> dict:
-    """Vakayı başlatır, ilk hasta profilini üretir."""
     conversation = [
-        {"role": "user", "content": "Vakayı başlat. Yukarıdaki kurallara göre ilk hasta profilini ve durumu üret."}
+        {"role": "user", "content": "Vakayı başlat. Rastgele yaş, cinsiyet, ön tanı ve ilk durumu üret."}
     ]
     return _call_llm(scenario_prompt, conversation)
 
 
 def process_turn(scenario_prompt: str, history: list[dict], user_message: str) -> dict:
-    """
-    history: önceki turların [{"role": ..., "content": ...}] formatında listesi
-    (main.py bunu InteractionLog kayıtlarından oluşturuyor).
-    """
     conversation = history + [{"role": "user", "content": user_message}]
     return _call_llm(scenario_prompt, conversation)
 
-
 def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
-    """Vaka bitince tüm geçmişi analiz edip karne üretir."""
     report_instruction = """
-    Vaka sona erdi. Yukarıdaki tüm konuşma geçmişini bir tıp eğitmeni gözüyle
-    değerlendir. SADECE aşağıdaki JSON formatında cevap ver:
+    Vaka sona erdi. Doktorun tüm performansını sıkı bir tıp ve hackathon jürisi gözüyle puanla.
+    
+    PUANLAMA KURALLARI:
+    - Doktor HİÇBİR ŞEY YAPMADIYSA, sadece zaman aşımına uğradıysa veya hastayı öldürdüyse skor 0-10 ARASI OLMALIDIR. Asla boş yere 20+ verme.
+    - Başarılı, hızlı ve doğru adımlar (MONA protokolü, EKG, O2, Aspirin) attıysa 80-100 ver.
+    - 4 jüri kriterinin her biri 0-25 arası puanlanmalıdır.
+
+    SADECE aşağıdaki JSON formatında cevap ver:
     {
-      "skor": <0-100 arası int>,
-      "guclu_yonler": "doktorun iyi yaptığı şeyler, 1-2 cümle",
-      "hatalar": "doktorun kaçırdığı veya yanlış yaptığı şeyler, 1-2 cümle",
-      "oneri": "hangi konuya tekrar çalışması gerektiğine dair somut bir öneri"
+      "score": <0-100 arası tam sayı>,
+      "status_badge": "BÜYÜK BAŞARI | GELİŞTİRİLMELİ | KRİTİK HATA",
+      "correct_actions": <int, doğru işlem sayısı>,
+      "incorrect_actions": <int, hatalı işlem veya zaman aşımı sayısı>,
+      "reaction_score": <1-10 arası reaksiyon hızı puanı>,
+      "criteria": {
+        "educational_impact": <0-25>,
+        "creative_ai_use": <0-25>,
+        "technical_execution": <0-25>,
+        "pitch_demo": <0-25>
+      },
+      "strengths": "Doktorun yaptığı en iyi 1-2 şey",
+      "errors": "Kaçırılan noktalar veya zaman kaybı",
+      "suggestions": "Tekrar çalışması gereken kritik klinik konu"
     }
     """
     conversation = history + [{"role": "user", "content": report_instruction}]

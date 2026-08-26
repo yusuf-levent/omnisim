@@ -1,93 +1,255 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OmniSim AI - İnteraktif Medikal Simülasyon</title>
+  <title>OmniSim AI - Interactive Clinical Decision Simulator</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- 1. Vaka seçim ekranı -->
+    <!-- Top Navigation Bar -->
+    <header class="top-nav">
+      <div class="nav-brand">
+        <div class="brand-icon">🫀</div>
+        <div class="brand-title">OmniSim <span>AI</span></div>
+      </div>
+      <div class="nav-user">
+        <button id="btn-abort-session" class="btn-abort" onclick="abortSession()" style="display:none;">
+          🛑 CONCLUDE & EVALUATE
+        </button>
+        <div class="status-indicator">
+          <span class="live-dot"></span> SIMULATION ACTIVE
+        </div>
+        <div class="user-profile">
+          <div class="user-avatar">👨‍⚕️</div>
+          <div class="user-info">
+            <span class="user-name">Dr. On-Duty Resident</span>
+            <span class="user-role">Emergency Department</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- 1. Scenario Selection Lobby (All 10 Scenarios) -->
     <section id="screen-select" class="screen active">
       <div class="hero-header">
-        <div class="badge">OmniSim Klinik Laboratuvarı</div>
-        <h1>OmniSim AI</h1>
-        <p class="subtitle">Hata yapmanın güvenli olduğu etkileşimli eğitim laboratuvarı</p>
+        <div class="badge">OmniSim AI Clinical Simulation Lab</div>
+        <h1>Emergency Clinical Simulator</h1>
+        <p class="subtitle">AI-Powered High-Fidelity Training Platform — Select an active case to begin</p>
       </div>
+
+      <!-- 10 Scenarios Rendered Dynamically Here -->
       <div id="scenario-list" class="scenario-grid"></div>
     </section>
 
-    <!-- 2. Simülasyon ekranı -->
+    <!-- 2. Interactive Simulation Dashboard -->
     <section id="screen-sim" class="screen">
-      <div class="sim-layout">
-        <!-- Sol Panel: Monitör -->
-        <div class="vitals-panel">
-          <div class="panel-header">
-            <h3>Hasta Monitörü</h3>
-            <div class="live-indicator">
-              <span class="live-dot"></span> CANLI
+      <div class="dashboard-grid">
+
+        <!-- Left Column: Patient Profile & Triage Notes -->
+        <div class="dash-panel patient-panel">
+          <div class="panel-title-bar">
+            <span>👤 PATIENT PROFILE</span>
+            <span class="tag-status">TRIAGE: RESUSCITATION</span>
+          </div>
+
+          <div class="patient-id-badge">
+            <div class="patient-avatar-box">🏥</div>
+            <div class="patient-id-meta">
+              <h4 id="patient-display-name">Case Inception</h4>
+              <p>Admission: EMS / Code 3</p>
             </div>
           </div>
 
-          <div class="vital-card">
-            <span class="vital-label">❤️ Nabız</span>
-            <span id="vital-nabiz" class="vital-value">--</span>
-          </div>
-          <div class="vital-card">
-            <span class="vital-label">🩸 Tansiyon</span>
-            <span id="vital-tansiyon" class="vital-value">--</span>
-          </div>
-          <div class="vital-card">
-            <span class="vital-label">🧠 Bilinç</span>
-            <span id="vital-bilinc" class="vital-value">--</span>
+          <div class="patient-meta-grid">
+            <div class="meta-item">
+              <span class="meta-label">AGE</span>
+              <span id="patient-age" class="meta-val">--</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">GENDER</span>
+              <span id="patient-gender" class="meta-val">--</span>
+            </div>
+            <div class="meta-item full">
+              <span class="meta-label">WORKING DIAGNOSIS</span>
+              <span id="patient-tani" class="meta-val">--</span>
+            </div>
           </div>
 
-          <div class="turn-badge">
-            Aşama: <span id="turn-count">0</span> / 6
+          <div class="doctor-notes-card">
+            <div class="notes-header">📋 TRIAGE & CLINICAL OBSERVATIONS</div>
+            <p id="doctor-note-text">Patient admitted to resuscitation bay. Telemetry online.</p>
           </div>
         </div>
 
-        <!-- Sağ Panel: Sohbet & Aksiyon -->
-        <div class="chat-panel">
+        <!-- Top Right: Live Telemetry & Vitals Monitor -->
+        <div class="dash-panel monitor-panel">
+          <div class="panel-title-bar">
+            <div class="monitor-title">
+              <span>📈 LIVE BEDSIDE MONITOR</span>
+            </div>
+            <span class="monitor-subtext">Continuous Telemetry Active</span>
+          </div>
+
+          <div class="monitor-content">
+            <div class="ecg-screen">
+              <canvas id="ecg-canvas"></canvas>
+            </div>
+
+            <div class="vitals-column">
+              <div class="vital-box">
+                <div class="vital-info">
+                  <span class="vital-name">HEART RATE</span>
+                  <span class="vital-num" id="vital-nabiz">--</span>
+                  <span class="vital-unit">bpm</span>
+                </div>
+              </div>
+
+              <div class="vital-box">
+                <div class="vital-info">
+                  <span class="vital-name">BLOOD PRESSURE</span>
+                  <span class="vital-num" id="vital-tansiyon">--</span>
+                  <span class="vital-unit">mmHg</span>
+                </div>
+              </div>
+
+              <div class="vital-box">
+                <div class="vital-info">
+                  <span class="vital-name">SpO2</span>
+                  <span class="vital-num" id="vital-spo2">--</span>
+                  <span class="vital-unit">%</span>
+                </div>
+              </div>
+
+              <div class="vital-box">
+                <div class="vital-info">
+                  <span class="vital-name">CONSCIOUSNESS</span>
+                  <span class="vital-num-text" id="vital-bilinc">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Center: Clinical Interaction Log -->
+        <div class="dash-panel chat-panel">
+          <div class="panel-title-bar">
+            <span>💬 CLINICAL INTERACTION LOG</span>
+            <span class="turn-indicator">STAGE: <strong id="turn-count">1</strong></span>
+          </div>
+
           <div id="chat-log" class="chat-log"></div>
+
           <form id="action-form" class="action-form">
             <input
               id="action-input"
               type="text"
-              placeholder="Müdahaleni yaz... (örn: Oksijen maskesi takıp EKG çekiyorum)"
+              placeholder="Enter clinical order... (e.g. /act Administer high-flow O2, 325mg Aspirin, establish IV access)"
               autocomplete="off"
             />
-            <button type="submit">Uygula</button>
+            <button id="submit-btn" type="submit">EXECUTE</button>
           </form>
         </div>
+
+        <!-- Bottom Right: Code Red Pressure Engine -->
+        <div class="dash-panel timer-panel">
+          <div class="panel-title-bar">
+            <span>🚨 TRIAGE STATUS</span>
+          </div>
+
+          <div class="code-red-box">
+            <span class="code-red-title">CODE RED</span>
+            <div class="countdown-circle">
+              <span id="timer-display">30</span>
+              <span class="sec-label">SECONDS</span>
+            </div>
+            <p class="timer-desc">Time-sensitive deterioration active. Delayed intervention accelerates patient collapse.</p>
+          </div>
+        </div>
+
       </div>
     </section>
 
-    <!-- 3. Karne ekranı -->
+    <!-- 3. Performance Scorecard & Rubric Evaluation -->
     <section id="screen-report" class="screen">
-      <div class="report-card">
-        <h2>Simülasyon Değerlendirmesi</h2>
-        <div class="score-circle">
-          <span id="report-score">--</span>
-          <span style="font-size: 0.85rem; color: #94a3b8; font-weight: 500; margin-top: 4px;">/ 100 PUAN</span>
+      <div class="report-container">
+        
+        <div class="report-header">
+          <h2>CASE PERFORMANCE EVALUATION</h2>
+          <p>Educational Simulation Performance & Jury Rubric Analysis</p>
         </div>
-        <div class="report-section">
-          <h4>✅ Güçlü Yönler</h4>
-          <p id="report-strengths"></p>
+
+        <div class="report-grid-top">
+          <!-- Radar Chart -->
+          <div class="radar-card">
+            <canvas id="radar-canvas" width="340" height="300"></canvas>
+          </div>
+
+          <!-- Quantitative Metrics -->
+          <div class="metrics-card">
+            <div class="metric-row green">
+              <span class="metric-label">Correct Clinical Interventions</span>
+              <span class="metric-val" id="rep-correct">0</span>
+            </div>
+            <div class="metric-row red">
+              <span class="metric-label">Clinical Errors / Timeouts</span>
+              <span class="metric-val" id="rep-wrong">0</span>
+            </div>
+            <div class="metric-row yellow">
+              <span class="metric-label">Reaction Speed Index</span>
+              <span class="metric-val" id="rep-reaction">0/10</span>
+            </div>
+            <div class="total-score-box">
+              <span class="score-title">Overall Performance Score:</span>
+              <div class="score-big"><span id="report-score">0</span>/100</div>
+              <span id="report-badge" class="score-status-tag">STATUS</span>
+            </div>
+          </div>
         </div>
-        <div class="report-section">
-          <h4>⚠️ Gelişim Alanları / Hatalar</h4>
-          <p id="report-mistakes"></p>
+
+        <!-- Qualitative Breakdown -->
+        <div class="report-grid-bottom">
+          <div class="feedback-card green-card">
+            <h4>✅ STRENGTHS & PROTOCOL ADHERENCE</h4>
+            <p id="report-strengths">--</p>
+          </div>
+          <div class="feedback-card red-card">
+            <h4>⚠️ ERROR ANALYSIS & GAPS</h4>
+            <p id="report-mistakes">--</p>
+          </div>
+          <div class="feedback-card blue-card">
+            <h4>💡 PEDAGOGICAL RECOMMENDATIONS</h4>
+            <p id="report-suggestion">--</p>
+          </div>
         </div>
-        <div class="report-section">
-          <h4>💡 Eğitmen Önerisi</h4>
-          <p id="report-suggestion"></p>
+
+        <div class="report-actions">
+          <button id="restart-btn" class="btn-primary" onclick="returnToMenu()">Return to Lobby / Select New Case</button>
         </div>
-        <button id="restart-btn">Farklı Bir Vaka Başlat</button>
+
       </div>
     </section>
+
+    <!-- 4. EMS Arrival Pop-up Modal -->
+    <div id="patient-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-badge">🚨 EMS INCOMING TRAUMA/MEDICAL NOTIFICATION</div>
+        <h2 id="modal-patient-title">Patient Intake Briefing</h2>
+        <div class="modal-body">
+          <p id="modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
+          
+          <div class="modal-details-grid">
+            <div><strong>Age / Gender:</strong> <span id="modal-age-gender">--</span></div>
+            <div><strong>Working Diagnosis:</strong> <span id="modal-tani">--</span></div>
+            <div><strong>Baseline HR:</strong> <span id="modal-nabiz">--</span> bpm</div>
+            <div><strong>Baseline BP:</strong> <span id="modal-tansiyon">--</span></div>
+          </div>
+        </div>
+        <button id="modal-close-btn" class="btn-modal" onclick="closePatientModal()">TAKE OVER RESUSCITATION (START)</button>
+      </div>
+    </div>
 
   </div>
 

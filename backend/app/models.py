@@ -1,16 +1,7 @@
-"""
-Veri modeli - bilinçli olarak sade tutuldu, 4 tablo yeterli:
-- SimSession: her bir vaka oturumu
-- VitalState: her turdaki vital değer geçmişi (grafik için işine yarar)
-- InteractionLog: kullanıcı <-> hasta konuşma geçmişi
-- ReportResult: vaka bitince üretilen karne
-"""
 import uuid
 from datetime import datetime
-
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
-
 from .database import Base
 
 
@@ -22,7 +13,7 @@ class SimSession(Base):
     __tablename__ = "sim_sessions"
 
     id = Column(String, primary_key=True, default=gen_id)
-    scenario_type = Column(String, nullable=False)  # örn. "kalp_krizi", "goz_muayenesi"
+    scenario_type = Column(String, nullable=False)
     status = Column(String, default="active")  # active | finished
     turn_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -37,9 +28,9 @@ class VitalState(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sim_sessions.id"))
-    nabiz = Column(Integer)
-    tansiyon = Column(String)  # "140/90" formatında tutuyoruz, basitlik için
-    bilinc = Column(String)
+    heart_rate = Column(Integer)
+    blood_pressure = Column(String)  # e.g. "140/90"
+    consciousness = Column(String)   # "Alert", "Lethargic", "Unresponsive"
     turn_no = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -52,9 +43,9 @@ class InteractionLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sim_sessions.id"))
     turn_no = Column(Integer)
-    user_message = Column(Text, nullable=True)  # ilk turda None olabilir (vaka açılışı)
-    hasta_repligi = Column(Text)
-    sistem_notu = Column(Text)
+    user_message = Column(Text, nullable=True)
+    patient_dialogue = Column(Text)
+    system_note = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("SimSession", back_populates="logs")
@@ -65,10 +56,10 @@ class ReportResult(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sim_sessions.id"), unique=True)
-    skor = Column(Integer)
-    guclu_yonler = Column(Text)
-    hatalar = Column(Text)
-    oneri = Column(Text)
+    score = Column(Integer)
+    strengths = Column(Text)
+    errors = Column(Text)
+    suggestions = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     session = relationship("SimSession", back_populates="report")

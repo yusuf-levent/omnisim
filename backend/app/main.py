@@ -7,13 +7,12 @@ from .database import engine, get_db, Base
 from .scenarios import SCENARIOS, get_scenario
 from .schemas import ActionRequest, TurnResponse, ReportResponse, SessionStartResponse
 
-MAX_TURNS = 6  # LLM ne derse desin, backend bu turda vakayı zorla bitirir
+MAX_TURNS = 15
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="OmniSim AI")
+app = FastAPI(title="OmniSim AI - Clinical Case Simulator")
 
-# Geliştirme aşamasında serbest, deploy ederken frontend domainine daraltılabilir
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,22 +22,25 @@ app.add_middleware(
 
 
 def _history_from_logs(logs: list[models.InteractionLog]) -> list[dict]:
-    """DB'deki log kayıtlarını LLM'e verilecek conversation formatına çevirir."""
     history = []
     for log in logs:
         if log.user_message:
             history.append({"role": "user", "content": log.user_message})
-        assistant_content = f'{{"hasta_repligi": "{log.hasta_repligi}", "sistem_notu": "{log.sistem_notu}"}}'
+        assistant_content = f'{{"patient_dialogue": "{log.patient_dialogue}", "system_note": "{log.system_note}"}}'
         history.append({"role": "assistant", "content": assistant_content})
     return history
 
 
 @app.get("/scenarios")
 def list_scenarios():
-    """Frontend'in vaka seçim ekranını çizmesi için - enabled olmayanlar da
-    'yakında' etiketiyle listelenir."""
     return {
-        key: {"label": val["label"], "enabled": val["enabled"]}
+        key: {
+            "label": val["label"],
+            "icon": val.get("icon", "🏥"),
+            "desc": val.get("desc", ""),
+            "tag": val.get("tag", "Clinical Emergency"),
+            "enabled": val["enabled"],
+        }
         for key, val in SCENARIOS.items()
     }
 
@@ -58,17 +60,17 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
 
     vital = models.VitalState(
         session_id=session.id,
-        nabiz=result["nabiz"],
-        tansiyon=result["tansiyon"],
-        bilinc=result["bilinc"],
+        heart_rate=int(result.get("heart_rate", 105)),
+        blood_pressure=str(result.get("blood_pressure", "150/95")),
+        consciousness=str(result.get("consciousness", "Alert")),
         turn_no=1,
     )
     log = models.InteractionLog(
         session_id=session.id,
         turn_no=1,
         user_message=None,
-        hasta_repligi=result["hasta_repligi"],
-        sistem_notu=result["sistem_notu"],
+        patient_dialogue=result.get("patient_dialogue", ""),
+        system_note=result.get("system_note", ""),
     )
     db.add_all([vital, log])
     db.commit()
@@ -76,12 +78,19 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
     turn = TurnResponse(
         session_id=session.id,
         turn_no=1,
-        hasta_repligi=result["hasta_repligi"],
-        sistem_notu=result["sistem_notu"],
-        nabiz=result["nabiz"],
-        tansiyon=result["tansiyon"],
-        bilinc=result["bilinc"],
-        vaka_bitti_mi=False,
+        age=int(result.get("age", 58)),
+        gender=str(result.get("gender", "Male")),
+        primary_diagnosis=str(result.get("primary_diagnosis", "Acute Coronary Syndrome")),
+        patient_dialogue=result.get("patient_dialogue", ""),
+        system_note=result.get("system_note", ""),
+        heart_rate=int(result.get("heart_rate", 105)),
+        blood_pressure=str(result.get("blood_pressure", "150/95")),
+        spo2=int(result.get("spo2", 93)),
+        consciousness=str(result.get("consciousness", "Alert")),
+        heart_rate_drift=float(result.get("heart_rate_drift", -0.5)),
+        min_heart_rate=int(result.get("min_heart_rate", 60)),
+        max_heart_rate=int(result.get("max_heart_rate", 140)),
+        case_completed=bool(result.get("case_completed", False)),
     )
     return SessionStartResponse(session_id=session.id, scenario_type=scenario_type, turn=turn)
 
@@ -90,9 +99,9 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
 def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db)):
     session = db.query(models.SimSession).filter_by(id=session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı")
+        raise HTTPException(status_code=404, detail="Session not found")
     if session.status == "finished":
-        raise HTTPException(status_code=400, detail="Bu vaka zaten sona erdi")
+        raise HTTPException(status_code=400, detail="This simulation has already concluded")
 
     scenario = get_scenario(session.scenario_type)
     history = _history_from_logs(session.logs)
@@ -101,24 +110,24 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
 
     new_turn_no = session.turn_count + 1
     force_end = new_turn_no >= MAX_TURNS
-    vaka_bitti = result.get("vaka_bitti_mi", False) or force_end
+    case_completed = bool(result.get("case_completed", False)) or force_end
 
     vital = models.VitalState(
         session_id=session.id,
-        nabiz=result["nabiz"],
-        tansiyon=result["tansiyon"],
-        bilinc=result["bilinc"],
+        heart_rate=int(result.get("heart_rate", 105)),
+        blood_pressure=str(result.get("blood_pressure", "140/90")),
+        consciousness=str(result.get("consciousness", "Alert")),
         turn_no=new_turn_no,
     )
     log = models.InteractionLog(
         session_id=session.id,
         turn_no=new_turn_no,
         user_message=action.message,
-        hasta_repligi=result["hasta_repligi"],
-        sistem_notu=result["sistem_notu"],
+        patient_dialogue=result.get("patient_dialogue", ""),
+        system_note=result.get("system_note", ""),
     )
     session.turn_count = new_turn_no
-    if vaka_bitti:
+    if case_completed:
         session.status = "finished"
 
     db.add_all([vital, log])
@@ -127,12 +136,19 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
     return TurnResponse(
         session_id=session.id,
         turn_no=new_turn_no,
-        hasta_repligi=result["hasta_repligi"],
-        sistem_notu=result["sistem_notu"],
-        nabiz=result["nabiz"],
-        tansiyon=result["tansiyon"],
-        bilinc=result["bilinc"],
-        vaka_bitti_mi=vaka_bitti,
+        age=int(result.get("age", 58)),
+        gender=str(result.get("gender", "Male")),
+        primary_diagnosis=str(result.get("primary_diagnosis", "Acute Coronary Syndrome")),
+        patient_dialogue=result.get("patient_dialogue", ""),
+        system_note=result.get("system_note", ""),
+        heart_rate=int(result.get("heart_rate", 105)),
+        blood_pressure=str(result.get("blood_pressure", "140/90")),
+        spo2=int(result.get("spo2", 94)),
+        consciousness=str(result.get("consciousness", "Alert")),
+        heart_rate_drift=float(result.get("heart_rate_drift", -0.5)),
+        min_heart_rate=int(result.get("min_heart_rate", 60)),
+        max_heart_rate=int(result.get("max_heart_rate", 140)),
+        case_completed=case_completed,
     )
 
 
@@ -140,17 +156,7 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
 def end_session(session_id: str, db: DBSession = Depends(get_db)):
     session = db.query(models.SimSession).filter_by(id=session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı")
-
-    existing_report = db.query(models.ReportResult).filter_by(session_id=session_id).first()
-    if existing_report:
-        return ReportResponse(
-            session_id=session_id,
-            skor=existing_report.skor,
-            guclu_yonler=existing_report.guclu_yonler,
-            hatalar=existing_report.hatalar,
-            oneri=existing_report.oneri,
-        )
+        raise HTTPException(status_code=404, detail="Session not found")
 
     scenario = get_scenario(session.scenario_type)
     history = _history_from_logs(session.logs)
@@ -158,10 +164,10 @@ def end_session(session_id: str, db: DBSession = Depends(get_db)):
 
     report = models.ReportResult(
         session_id=session_id,
-        skor=result["skor"],
-        guclu_yonler=result["guclu_yonler"],
-        hatalar=result["hatalar"],
-        oneri=result["oneri"],
+        score=int(result.get("score", 0)),
+        strengths=str(result.get("strengths", "")),
+        errors=str(result.get("errors", "")),
+        suggestions=str(result.get("suggestions", "")),
     )
     session.status = "finished"
     db.add(report)
@@ -169,38 +175,18 @@ def end_session(session_id: str, db: DBSession = Depends(get_db)):
 
     return ReportResponse(
         session_id=session_id,
-        skor=report.skor,
-        guclu_yonler=report.guclu_yonler,
-        hatalar=report.hatalar,
-        oneri=report.oneri,
+        score=int(result.get("score", 0)),
+        status_badge=str(result.get("status_badge", "COMPLETED")),
+        correct_actions=int(result.get("correct_actions", 0)),
+        incorrect_actions=int(result.get("incorrect_actions", 0)),
+        reaction_score=int(result.get("reaction_score", 5)),
+        criteria=result.get("criteria", {
+            "educational_impact": 15,
+            "creative_ai_use": 15,
+            "technical_execution": 15,
+            "pitch_demo": 15,
+        }),
+        strengths=str(result.get("strengths", "No entries recorded")),
+        errors=str(result.get("errors", "No critical errors recorded")),
+        suggestions=str(result.get("suggestions", "Review clinical guidelines.")),
     )
-
-
-@app.get("/session/{session_id}")
-def get_session(session_id: str, db: DBSession = Depends(get_db)):
-    """Sayfa yenilenirse diye mevcut durumu döner."""
-    session = db.query(models.SimSession).filter_by(id=session_id).first()
-    if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı")
-
-    last_vital = session.vitals[-1] if session.vitals else None
-    return {
-        "session_id": session.id,
-        "scenario_type": session.scenario_type,
-        "status": session.status,
-        "turn_count": session.turn_count,
-        "logs": [
-            {
-                "turn_no": log.turn_no,
-                "user_message": log.user_message,
-                "hasta_repligi": log.hasta_repligi,
-                "sistem_notu": log.sistem_notu,
-            }
-            for log in session.logs
-        ],
-        "current_vital": {
-            "nabiz": last_vital.nabiz,
-            "tansiyon": last_vital.tansiyon,
-            "bilinc": last_vital.bilinc,
-        } if last_vital else None,
-    }
