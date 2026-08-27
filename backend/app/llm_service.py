@@ -30,32 +30,32 @@ def start_scenario(scenario_prompt: str) -> dict:
 def process_turn(scenario_prompt: str, history: list[dict], user_message: str) -> dict:
     conversation = history + [{"role": "user", "content": user_message}]
     return _call_llm(scenario_prompt, conversation)
-
 def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     report_instruction = """
-    Vaka sona erdi. Doktorun tüm performansını sıkı bir tıp ve hackathon jürisi gözüyle puanla.
-    
-    PUANLAMA KURALLARI:
-    - Doktor HİÇBİR ŞEY YAPMADIYSA, sadece zaman aşımına uğradıysa veya hastayı öldürdüyse skor 0-10 ARASI OLMALIDIR. Asla boş yere 20+ verme.
-    - Başarılı, hızlı ve doğru adımlar (MONA protokolü, EKG, O2, Aspirin) attıysa 80-100 ver.
-    - 4 jüri kriterinin her biri 0-25 arası puanlanmalıdır.
+    The clinical simulation has ended. You MUST write the ENTIRE evaluation STRICTLY IN ENGLISH.
+    Do NOT use Turkish or any other language under any circumstances.
 
-    SADECE aşağıdaki JSON formatında cevap ver:
+    SCORING STANDARDS:
+    - If the user performed zero clinical interventions, accumulated timeouts, or allowed patient arrest: Overall score MUST be 0-15.
+    - If appropriate emergency protocol was executed: Overall score 80-100.
+    - Score each of the 4 jury criteria out of 25.
+
+    OUTPUT FORMAT (JSON ONLY - ALL TEXT VALUES MUST BE IN ENGLISH):
     {
-      "score": <0-100 arası tam sayı>,
-      "status_badge": "BÜYÜK BAŞARI | GELİŞTİRİLMELİ | KRİTİK HATA",
-      "correct_actions": <int, doğru işlem sayısı>,
-      "incorrect_actions": <int, hatalı işlem veya zaman aşımı sayısı>,
-      "reaction_score": <1-10 arası reaksiyon hızı puanı>,
+      "score": 85,
+      "status_badge": "OUTSTANDING | NEEDS IMPROVEMENT | CRITICAL FAILURE (ARREST)",
+      "correct_actions": 3,
+      "incorrect_actions": 0,
+      "reaction_score": 8,
       "criteria": {
-        "educational_impact": <0-25>,
-        "creative_ai_use": <0-25>,
-        "technical_execution": <0-25>,
-        "pitch_demo": <0-25>
+        "educational_impact": 22,
+        "creative_ai_use": 21,
+        "technical_execution": 23,
+        "pitch_demo": 22
       },
-      "strengths": "Doktorun yaptığı en iyi 1-2 şey",
-      "errors": "Kaçırılan noktalar veya zaman kaybı",
-      "suggestions": "Tekrar çalışması gereken kritik klinik konu"
+      "strengths": "Provide concise strengths strictly in English.",
+      "errors": "Provide error analysis and missed steps strictly in English.",
+      "suggestions": "Provide clinical study recommendations strictly in English."
     }
     """
     conversation = history + [{"role": "user", "content": report_instruction}]

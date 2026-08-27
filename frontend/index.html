@@ -16,6 +16,9 @@
         <div class="brand-title">OmniSim <span>AI</span></div>
       </div>
       <div class="nav-user">
+        <button id="btn-audio-toggle" class="btn-audio" onclick="toggleAudio()">
+          🔊 SOUND: <span id="audio-status">ON</span>
+        </button>
         <button id="btn-abort-session" class="btn-abort" onclick="abortSession()" style="display:none;">
           🛑 CONCLUDE & EVALUATE
         </button>
@@ -32,7 +35,7 @@
       </div>
     </header>
 
-    <!-- 1. Scenario Selection Lobby (All 10 Scenarios) -->
+    <!-- 1. Scenario Selection Lobby -->
     <section id="screen-select" class="screen active">
       <div class="hero-header">
         <div class="badge">OmniSim AI Clinical Simulation Lab</div>
@@ -40,15 +43,14 @@
         <p class="subtitle">AI-Powered High-Fidelity Training Platform — Select an active case to begin</p>
       </div>
 
-      <!-- 10 Scenarios Rendered Dynamically Here -->
       <div id="scenario-list" class="scenario-grid"></div>
     </section>
 
-    <!-- 2. Interactive Simulation Dashboard -->
+    <!-- 2. Interactive Simulation Workspace -->
     <section id="screen-sim" class="screen">
       <div class="dashboard-grid">
 
-        <!-- Left Column: Patient Profile & Triage Notes -->
+        <!-- Left Column: Patient Profile & Dynamic DDx Board -->
         <div class="dash-panel patient-panel">
           <div class="panel-title-bar">
             <span>👤 PATIENT PROFILE</span>
@@ -78,6 +80,14 @@
             </div>
           </div>
 
+          <!-- Feature: Dynamic Differential Diagnosis (DDx) Board -->
+          <div class="ddx-card">
+            <div class="ddx-header">🎯 DIFFERENTIAL DIAGNOSIS (DDx)</div>
+            <div id="ddx-list-container" class="ddx-list">
+              <!-- Rendered dynamically by app.js based on the active scenario -->
+            </div>
+          </div>
+
           <div class="doctor-notes-card">
             <div class="notes-header">📋 TRIAGE & CLINICAL OBSERVATIONS</div>
             <p id="doctor-note-text">Patient admitted to resuscitation bay. Telemetry online.</p>
@@ -90,7 +100,10 @@
             <div class="monitor-title">
               <span>📈 LIVE BEDSIDE MONITOR</span>
             </div>
-            <span class="monitor-subtext">Continuous Telemetry Active</span>
+            <div class="monitor-actions">
+              <button class="btn-diag" onclick="openLabModal()">🧪 VIEW LABS / ECG STRIP</button>
+              <span class="monitor-subtext">Continuous Telemetry Online</span>
+            </div>
           </div>
 
           <div class="monitor-content">
@@ -133,7 +146,7 @@
           </div>
         </div>
 
-        <!-- Bottom Center: Clinical Interaction Log -->
+        <!-- Bottom Center: Clinical Log & Quick Action Chips -->
         <div class="dash-panel chat-panel">
           <div class="panel-title-bar">
             <span>💬 CLINICAL INTERACTION LOG</span>
@@ -142,18 +155,28 @@
 
           <div id="chat-log" class="chat-log"></div>
 
+          <!-- Feature: Quick-Action Clinical Chips -->
+          <div class="quick-action-bar">
+            <button type="button" class="chip-btn" onclick="executeQuickAction('Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)')">🫁 High-Flow O2</button>
+            <button type="button" class="chip-btn" onclick="executeQuickAction('Perform immediate 12-Lead ECG and monitor continuous rhythm')">📈 12-Lead ECG</button>
+            <button type="button" class="chip-btn" onclick="executeQuickAction('Administer 325mg chewable Aspirin PO')">💊 Aspirin 325mg</button>
+            <button type="button" class="chip-btn" onclick="executeQuickAction('Establish dual large-bore 18G IV peripheral lines')">🩸 Dual 18G IV</button>
+            <button type="button" class="chip-btn" onclick="executeQuickAction('Order Stat Cardiac Enzymes, Troponin-I, and Arterial Blood Gas')">🧪 Stat Labs</button>
+            <button type="button" class="chip-btn warning" onclick="executeQuickAction('Prepare Defibrillator and charge to 200J Biphasic')">⚡ Defib 200J</button>
+          </div>
+
           <form id="action-form" class="action-form">
             <input
               id="action-input"
               type="text"
-              placeholder="Enter clinical order... (e.g. /act Administer high-flow O2, 325mg Aspirin, establish IV access)"
+              placeholder="Enter custom clinical order... (e.g. /act Sublingual Nitroglycerin 0.4mg, draw repeat Troponin)"
               autocomplete="off"
             />
             <button id="submit-btn" type="submit">EXECUTE</button>
           </form>
         </div>
 
-        <!-- Bottom Right: Code Red Pressure Engine -->
+        <!-- Bottom Right: Code Red Engine -->
         <div class="dash-panel timer-panel">
           <div class="panel-title-bar">
             <span>🚨 TRIAGE STATUS</span>
@@ -172,7 +195,7 @@
       </div>
     </section>
 
-    <!-- 3. Performance Scorecard & Rubric Evaluation -->
+    <!-- 3. Performance Scorecard & Evaluation with Timeline -->
     <section id="screen-report" class="screen">
       <div class="report-container">
         
@@ -182,12 +205,10 @@
         </div>
 
         <div class="report-grid-top">
-          <!-- Radar Chart -->
           <div class="radar-card">
             <canvas id="radar-canvas" width="340" height="300"></canvas>
           </div>
 
-          <!-- Quantitative Metrics -->
           <div class="metrics-card">
             <div class="metric-row green">
               <span class="metric-label">Correct Clinical Interventions</span>
@@ -209,7 +230,12 @@
           </div>
         </div>
 
-        <!-- Qualitative Breakdown -->
+        <!-- Feature: Interactive Event Timeline -->
+        <div class="timeline-container">
+          <h4>⏱️ CLINICAL DECISION TIMELINE REPLAY</h4>
+          <div id="timeline-events" class="timeline-events"></div>
+        </div>
+
         <div class="report-grid-bottom">
           <div class="feedback-card green-card">
             <h4>✅ STRENGTHS & PROTOCOL ADHERENCE</h4>
@@ -239,7 +265,6 @@
         <h2 id="modal-patient-title">Patient Intake Briefing</h2>
         <div class="modal-body">
           <p id="modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
-          
           <div class="modal-details-grid">
             <div><strong>Age / Gender:</strong> <span id="modal-age-gender">--</span></div>
             <div><strong>Working Diagnosis:</strong> <span id="modal-tani">--</span></div>
@@ -248,6 +273,30 @@
           </div>
         </div>
         <button id="modal-close-btn" class="btn-modal" onclick="closePatientModal()">TAKE OVER RESUSCITATION (START)</button>
+      </div>
+    </div>
+
+    <!-- 5. Feature: Interactive Diagnostics & Lab Results Modal -->
+    <div id="lab-modal" class="modal-overlay">
+      <div class="modal-card wide">
+        <div class="modal-badge">🔬 STAT EMERGENCY DIAGNOSTICS</div>
+        <h2>Bedside Telemetry & Lab Panel</h2>
+        <div class="lab-grid">
+          <div class="lab-box">
+            <h4>12-LEAD TELEMETRY FINDINGS</h4>
+            <p><strong>Rhythm:</strong> Sinus Tachycardia @ 112 bpm</p>
+            <p><strong>ST-Segment:</strong> >2mm elevation in leads V1-V4 (Acute Anterior STEMI)</p>
+            <p><strong>Reciprocal Changes:</strong> ST-depression in II, III, aVF</p>
+          </div>
+          <div class="lab-box">
+            <h4>STAT BIOMARKERS</h4>
+            <p><strong>High-Sensitivity Troponin-I:</strong> <span class="text-danger">1.82 ng/mL (High)</span></p>
+            <p><strong>Serum Lactate:</strong> 2.4 mmol/L</p>
+            <p><strong>Arterial Blood Gas (ABG):</strong> pH 7.34, pO2 82, pCO2 38</p>
+            <p><strong>Blood Glucose:</strong> 138 mg/dL</p>
+          </div>
+        </div>
+        <button class="btn-modal" onclick="closeLabModal()">CLOSE DIAGNOSTICS</button>
       </div>
     </div>
 
