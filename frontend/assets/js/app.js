@@ -968,10 +968,28 @@ function logTimelineEvent(tag, desc) {
 }
 
 function abortSession() {
-  if (confirm("Conclude the simulation now and generate the jury evaluation report?")) {
-    stopGameLoop();
-    finishSession();
-  }
+  if (isEndingSession) return;
+
+  const modal = document.getElementById("abort-confirm-modal");
+  const stage = document.getElementById("confirm-stage");
+  const hr = document.getElementById("confirm-hr");
+  const spo2 = document.getElementById("confirm-spo2");
+
+  if (stage) stage.textContent = document.getElementById("turn-count")?.textContent || "--";
+  if (hr) hr.textContent = `${Math.round(currentHeartRate)} bpm`;
+  if (spo2) spo2.textContent = `${currentSpO2}%`;
+
+  modal?.classList.add("active");
+}
+
+function closeAbortConfirmModal() {
+  document.getElementById("abort-confirm-modal")?.classList.remove("active");
+}
+
+function confirmAbortSession() {
+  closeAbortConfirmModal();
+  stopGameLoop();
+  finishSession();
 }
 
 function openLabModal() {

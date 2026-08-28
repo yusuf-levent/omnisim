@@ -277,7 +277,38 @@
       </div>
     </div>
 
-    <!-- 6. Feature: Clinical Outcome Pop-up Modal -->
+    <!-- 6. Feature: Manual Case Conclusion Confirmation Modal -->
+    <div id="abort-confirm-modal" class="modal-overlay">
+      <div class="modal-card confirm-card">
+        <div class="modal-badge">⚠️ CASE TERMINATION REQUEST</div>
+        <h2>Conclude Simulation?</h2>
+        <div class="modal-body">
+          <p class="modal-text">
+            This will stop the active resuscitation and generate the performance evaluation from the decisions recorded so far.
+          </p>
+          <div class="confirm-summary">
+            <div>
+              <span>Current Stage</span>
+              <strong id="confirm-stage">--</strong>
+            </div>
+            <div>
+              <span>Current HR</span>
+              <strong id="confirm-hr">-- bpm</strong>
+            </div>
+            <div>
+              <span>SpO2</span>
+              <strong id="confirm-spo2">--%</strong>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-modal secondary" onclick="closeAbortConfirmModal()">KEEP SIMULATION RUNNING</button>
+          <button class="btn-modal danger" onclick="confirmAbortSession()">CONCLUDE & EVALUATE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. Feature: Clinical Outcome Pop-up Modal -->
     <div id="outcome-modal" class="modal-overlay">
       <div class="modal-card">
         <div id="outcome-badge" class="modal-badge">🚨 CLINICAL OUTCOME NOTICE</div>
@@ -296,7 +327,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260828-4"></script>
-  <script src="assets/js/app.js?v=20260828-4"></script>
+  <script src="assets/js/config.js?v=20260828-5"></script>
+  <script src="assets/js/app.js?v=20260828-5"></script>
 </body>
 </html>
