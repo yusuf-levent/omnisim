@@ -14,6 +14,7 @@ let timeLeft = 30;
 const TURN_DURATION = 30;
 let gameLoopInterval = null;
 let isRequestInProgress = false;
+let hasBreachedThreshold = false;
 
 // Event Timeline Tracking
 let sessionActionLogs = [];
@@ -22,6 +23,7 @@ let sessionStartTime = null;
 // Web Audio API State & Telemetry
 let audioCtx = null;
 let isAudioEnabled = true;
+let cachedReportData = null;
 
 // Dynamic Differential Diagnosis (DDx) Profiles
 const DDX_PROFILES = {
@@ -62,6 +64,110 @@ const DDX_PROFILES = {
   ],
 };
 
+// Scenario-Specific Quick Action Chips
+const QUICK_ACTIONS = {
+  acute_coronary_syndrome: [
+    { label: "🫁 High-Flow O2", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
+    { label: "📈 12-Lead ECG", cmd: "Perform immediate 12-Lead ECG and monitor rhythm" },
+    { label: "💊 Aspirin 325mg", cmd: "Administer 325mg chewable Aspirin PO" },
+    { label: "💉 Sublingual NTG", cmd: "Administer Sublingual Nitroglycerin 0.4mg" },
+    { label: "🧪 Stat Cardiac Labs", cmd: "Order Stat Troponin-I, CK-MB, and Arterial Blood Gas" },
+    { label: "⚡ Defib 200J", cmd: "Prepare Defibrillator and charge to 200J Biphasic", warning: true },
+  ],
+  acute_ischemic_stroke: [
+    { label: "🧠 Non-Contrast Head CT", cmd: "Stat Non-Contrast Head CT to rule out intracranial hemorrhage" },
+    { label: "🩸 Stat Capillary Glucose", cmd: "Perform fingerstick blood glucose check immediately" },
+    { label: "⏱️ NIHSS Assessment", cmd: "Perform complete NIH Stroke Scale (NIHSS) assessment" },
+    { label: "💊 IV Labetalol 10mg", cmd: "Administer IV Labetalol 10mg to manage severe hypertension" },
+    { label: "💉 Prep IV Alteplase (tPA)", cmd: "Calculate dose and prepare IV Alteplase (tPA) for acute stroke" },
+    { label: "🏥 Code Neuro Stroke Alert", cmd: "Activate Stroke Team and Neurointerventional suite", warning: true },
+  ],
+  acute_pulmonary_edema: [
+    { label: "🫁 Non-Invasive BiPAP", cmd: "Initiate BiPAP non-invasive ventilation (IPAP 12 / EPAP 6)" },
+    { label: "💉 IV Furosemide 40mg", cmd: "Administer IV Furosemide 40mg bolus" },
+    { label: "💊 IV Nitroglycerin Drip", cmd: "Start IV Nitroglycerin infusion at 20 mcg/min" },
+    { label: "📐 Elevate Bed Head 90°", cmd: "Position patient in high Fowler position upright" },
+    { label: "🧪 Stat BNP & ABG", cmd: "Draw Stat BNP, Arterial Blood Gas, and Troponin" },
+    { label: "🚨 Intubation Tray", cmd: "Prepare Rapid Sequence Intubation (RSI) kit", warning: true },
+  ],
+  anaphylactic_shock: [
+    { label: "💉 IM Epinephrine 0.3mg", cmd: "Administer IM Epinephrine 0.3mg (1:1000) anterolateral thigh" },
+    { label: "💧 1000mL Saline Bolus", cmd: "Infuse 1000mL 0.9% Normal Saline rapid pressure bag" },
+    { label: "💊 IV Diphenhydramine 50mg", cmd: "Administer IV Diphenhydramine 50mg" },
+    { label: "💉 IV Methylprednisolone", cmd: "Administer IV Methylprednisolone 125mg" },
+    { label: "🫁 Nebulized Albuterol", cmd: "Administer Nebulized Albuterol 2.5mg with Oxygen" },
+    { label: "🚨 Prep Surgical Airway", cmd: "Prepare Cricothyroidotomy kit for impending laryngospasm", warning: true },
+  ],
+  diabetic_ketoacidosis: [
+    { label: "💧 1L 0.9% Normal Saline", cmd: "Infuse 1 Liter 0.9% Normal Saline IV bolus" },
+    { label: "🩸 Stat VBG, K+, Glucose", cmd: "Draw Stat VBG, Potassium, Beta-hydroxybutyrate, Glucose" },
+    { label: "💉 Regular Insulin Bolus", cmd: "Administer Regular Insulin IV 0.1 units/kg bolus" },
+    { label: "🧪 IV Potassium 20mEq", cmd: "Add 20 mEq Potassium Chloride to IV maintenance fluids" },
+    { label: "📊 Continuous Glucose Mon", cmd: "Establish hourly point-of-care capillary glucose monitoring" },
+    { label: "⚠️ Monitor Anion Gap", cmd: "Calculate and monitor serum anion gap and osmolality", warning: true },
+  ],
+  hypovolemic_shock: [
+    { label: "🩸 Dual 14G IV Lines", cmd: "Place bilateral 14G large-bore peripheral IV access lines" },
+    { label: "🩸 2 Units O-Neg Blood", cmd: "Initiate rapid transfusion of 2 Units Uncrossed O-Negative PRBCs" },
+    { label: "💧 Rapid Level-1 Infuser", cmd: "Connect Level-1 rapid blood and fluid warmer infuser" },
+    { label: "🔍 Stat Bedside FAST Exam", cmd: "Perform emergency bedside FAST ultrasound for free fluid" },
+    { label: "💉 Tranexamic Acid (TXA)", cmd: "Administer 1g IV Tranexamic Acid (TXA) over 10 minutes" },
+    { label: "🚨 Massive Transfusion (MTP)", cmd: "Activate Massive Transfusion Protocol (1:1:1)", warning: true },
+  ],
+  default: [
+    { label: "🫁 High-Flow O2", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
+    { label: "🩸 Dual Large-Bore IV", cmd: "Establish dual large-bore 18G IV peripheral lines" },
+    { label: "🧪 Stat Emergency Panel", cmd: "Order Stat Complete Blood Count, Electrolytes, and ABG" },
+    { label: "📈 12-Lead ECG", cmd: "Perform immediate 12-Lead ECG and monitor continuous rhythm" },
+  ],
+};
+
+// Scenario-Specific Lab & Diagnostics Results
+const LAB_PANELS = {
+  acute_coronary_syndrome: {
+    ecgTitle: "12-LEAD TELEMETRY FINDINGS",
+    ecg: "<strong>Rhythm:</strong> Sinus Tachycardia @ 112 bpm<br><strong>ST-Segment:</strong> >2.5mm elevation in leads V1-V4 (Acute Anterior STEMI)<br><strong>Reciprocal:</strong> ST-depression in leads II, III, aVF",
+    labsTitle: "STAT BIOMARKERS",
+    labs: "<strong>hs-Troponin-I:</strong> <span class='text-danger'>1.94 ng/mL (High)</span><br><strong>Serum Lactate:</strong> 2.4 mmol/L<br><strong>ABG:</strong> pH 7.35, pO2 81, pCO2 39, HCO3 22<br><strong>Blood Glucose:</strong> 138 mg/dL",
+  },
+  acute_ischemic_stroke: {
+    ecgTitle: "NEUROIMAGING & TELEMETRY",
+    ecg: "<strong>Non-Contrast Head CT:</strong> No intracranial hemorrhage/mass effect detected. Early subtle sulcal effacement in Left MCA territory.<br><strong>Rhythm:</strong> Sinus Rhythm @ 88 bpm (No acute AFib)",
+    labsTitle: "STAT STROKE LAB PANEL",
+    labs: "<strong>Fingerstick Glucose:</strong> 112 mg/dL (Hypoglycemia excluded)<br><strong>INR / PT:</strong> 1.05 / 11.8s (Within therapeutic window)<br><strong>Platelets:</strong> 245,000 /mcL<br><strong>Creatinine:</strong> 0.95 mg/dL",
+  },
+  acute_pulmonary_edema: {
+    ecgTitle: "CARDIAC & ULTRASOUND FINDINGS",
+    ecg: "<strong>Bedside Lung US:</strong> Diffuse bilateral B-lines ('Wet Lungs') across all 8 zones.<br><strong>Telemetry:</strong> Sinus Tachycardia @ 124 bpm, LVH strain pattern.",
+    labsTitle: "BIOMARKERS & GASOMETRY",
+    labs: "<strong>NT-proBNP:</strong> <span class='text-danger'>8,450 pg/mL (Critical)</span><br><strong>ABG:</strong> pH 7.28, pO2 58 mmHg (Severe Hypoxemia), pCO2 48<br><strong>Troponin-I:</strong> 0.12 ng/mL (Mild elevation secondary to strain)",
+  },
+  anaphylactic_shock: {
+    ecgTitle: "AIRWAY & TELEMETRY OBSERVATIONS",
+    ecg: "<strong>Airway Scope:</strong> Moderate supraglottic edema, vocal cord swelling with inspiratory stridor.<br><strong>Rhythm:</strong> Sinus Tachycardia @ 132 bpm with frequent PACs.",
+    labsTitle: "STAT SHOCK LABS",
+    labs: "<strong>Serum Tryptase:</strong> <span class='text-danger'>32.4 mcg/L (Markedly Elevated)</span><br><strong>Venous Lactate:</strong> 3.8 mmol/L<br><strong>ABG:</strong> pH 7.31, pO2 72, pCO2 42<br><strong>WBC:</strong> 14.2 x10^3/mcL (Eosinophils 8%)",
+  },
+  diabetic_ketoacidosis: {
+    ecgTitle: "METABOLIC ECG SIGNS",
+    ecg: "<strong>Rhythm:</strong> Sinus Tachycardia @ 118 bpm<br><strong>T-Waves:</strong> Peaked symmetric T-waves suggestive of hyperkalemia risk.<br><strong>QTc:</strong> 440ms (Normal)",
+    labsTitle: "STAT METABOLIC & KETONE PANEL",
+    labs: "<strong>Capillary Glucose:</strong> <span class='text-danger'>542 mg/dL (Critical High)</span><br><strong>Serum Beta-Hydroxybutyrate:</strong> <span class='text-danger'>6.8 mmol/L</span><br><strong>VBG:</strong> pH 7.14, HCO3 9 mEq/L, pCO2 24 (Kussmaul)<br><strong>Serum Potassium (K+):</strong> 5.4 mEq/L<br><strong>Anion Gap:</strong> 26 (High AG Metabolic Acidosis)",
+  },
+  hypovolemic_shock: {
+    ecgTitle: "TRAUMA FAST & ECG MONITOR",
+    ecg: "<strong>Bedside FAST US:</strong> Positive free fluid in Morrison's pouch and splenorenal recess.<br><strong>Rhythm:</strong> Sinus Tachycardia @ 138 bpm with narrow QRS complexes.",
+    labsTitle: "STAT BLOOD & COAGULATION",
+    labs: "<strong>Hemoglobin / Hct:</strong> <span class='text-danger'>6.8 g/dL / 20.4%</span><br><strong>Serum Lactate:</strong> <span class='text-danger'>5.2 mmol/L (Severe tissue hypoperfusion)</span><br><strong>ABG:</strong> pH 7.22, Base Deficit -9.5 mEq/L<br><strong>Platelets / Fibrinogen:</strong> 110k / 140 mg/dL",
+  },
+  default: {
+    ecgTitle: "TELEMETRY OVERVIEW",
+    ecg: "<strong>Rhythm:</strong> Sinus Tachycardia @ 110 bpm.<br><strong>Ischemia:</strong> Non-specific ST/T wave changes.",
+    labsTitle: "GENERAL EMERGENCY PANEL",
+    labs: "<strong>CBC:</strong> WBC 11.2, Hb 13.5<br><strong>Lactate:</strong> 1.8 mmol/L<br><strong>Basic Chemistries:</strong> Na 139, K 4.1, Cr 1.0",
+  },
+};
+
 const screens = {
   select: document.getElementById("screen-select"),
   sim: document.getElementById("screen-sim"),
@@ -93,7 +199,7 @@ function initAudioContext() {
 }
 
 function playBedsideBeep() {
-  if (!isAudioEnabled || !audioCtx) return;
+  if (!isAudioEnabled || !audioCtx || currentConsciousness === "Unresponsive") return;
   try {
     const now = audioCtx.currentTime;
 
@@ -173,10 +279,47 @@ async function loadScenarios() {
   }
 }
 
-// --- 3. Start Session & Modal Handling ---
+// --- 3. Dynamic Quick Chips & Diagnostics Renderer ---
+function renderQuickActions() {
+  const container = document.getElementById("quick-action-container");
+  if (!container) return;
+
+  const actions = QUICK_ACTIONS[activeScenarioKey] || QUICK_ACTIONS.default;
+  container.innerHTML = actions
+    .map(
+      (act) => `
+    <button type="button" class="chip-btn ${act.warning ? "warning" : ""}" onclick="executeQuickAction('${act.cmd.replace(/'/g, "\\'")}')">
+      ${act.label}
+    </button>
+  `
+    )
+    .join("");
+}
+
+function renderLabModal() {
+  const container = document.getElementById("lab-content-container");
+  if (!container) return;
+
+  const data = LAB_PANELS[activeScenarioKey] || LAB_PANELS.default;
+  container.innerHTML = `
+    <div class="lab-box">
+      <h4>${data.ecgTitle}</h4>
+      <p>${data.ecg}</p>
+    </div>
+    <div class="lab-box">
+      <h4>${data.labsTitle}</h4>
+      <p>${data.labs}</p>
+    </div>
+  `;
+}
+
+// --- 4. Start Session & Modal Handling ---
 async function startSession(scenarioType) {
   activeScenarioKey = scenarioType || "acute_coronary_syndrome";
+  hasBreachedThreshold = false;
+  isRequestInProgress = false;
   initAudioContext();
+
   try {
     const res = await fetch(`${API_BASE}/session/start?scenario_type=${scenarioType}`, {
       method: "POST",
@@ -192,7 +335,7 @@ async function startSession(scenarioType) {
 
     const age = data.turn?.age || 54;
     const gender = data.turn?.gender || "Male";
-    const diagnosis = data.turn?.primary_diagnosis || "Acute Coronary Syndrome";
+    const diagnosis = data.turn?.primary_diagnosis || "Acute Clinical Inception";
     const hr = data.turn?.heart_rate || 110;
     const bp = data.turn?.blood_pressure || "150/95";
     const spo2 = data.turn?.spo2 || 92;
@@ -214,6 +357,9 @@ async function startSession(scenarioType) {
     document.getElementById("modal-nabiz").textContent = hr;
     document.getElementById("modal-tansiyon").textContent = bp;
 
+    renderQuickActions();
+    renderLabModal();
+
     logTimelineEvent("EMS Admission", `Patient admitted with ${diagnosis}`);
     renderTurn(data.turn, null, false);
     document.getElementById("patient-modal").classList.add("active");
@@ -229,9 +375,7 @@ function closePatientModal() {
   startGameLoop();
 }
 
-// --- 4. Ticking Simulation Engine (Safe & Debounced) ---
-let hasBreachedThreshold = false; // Eşik döngüsünü kilitleyen bayrak
-
+// --- 5. Ticking Simulation Engine (Safe & Debounced) ---
 function stopGameLoop() {
   if (gameLoopInterval !== null) {
     clearInterval(gameLoopInterval);
@@ -244,10 +388,7 @@ function startGameLoop() {
   timeLeft = TURN_DURATION;
   updateTimerUI();
 
-  console.log(`⏱️ [GAME LOOP BAŞLADI] Süre: ${timeLeft}s | HR: ${Math.round(currentHeartRate)} bpm`);
-
   gameLoopInterval = setInterval(() => {
-    // İstek devam ederken sayacı dondur
     if (isRequestInProgress) return;
 
     timeLeft--;
@@ -258,14 +399,14 @@ function startGameLoop() {
     const hrEl = document.getElementById("vital-nabiz");
     if (hrEl) hrEl.textContent = roundedHR;
 
-    // 1. Kritik Güvenlik Eşiği Denetimi (Tek seferlik kilit ile tetiklenir)
+    // Kritik Güvenlik Eşiği Denetimi
     if ((roundedHR <= minHeartRate || roundedHR >= maxHeartRate) && !hasBreachedThreshold) {
       hasBreachedThreshold = true;
       stopGameLoop();
       logTimelineEvent("Threshold Breach", `Heart rate critical (${roundedHR} bpm)`);
       sendActionToServer(`[CRITICAL THRESHOLD BREACHED: Heart Rate reached ${roundedHR} bpm! Patient entering cardiovascular collapse!]`);
     } 
-    // 2. 30 Saniye Timeout Denetimi
+    // 30 Saniye Timeout Denetimi
     else if (timeLeft <= 0) {
       stopGameLoop();
       logTimelineEvent("Timeout Error", "30s elapsed with zero interventions");
@@ -273,6 +414,7 @@ function startGameLoop() {
     }
   }, 1000);
 }
+
 function updateTimerUI() {
   const timerDisplay = document.getElementById("timer-display");
   if (timerDisplay) {
@@ -283,40 +425,36 @@ function updateTimerUI() {
 function setInteractionsDisabled(disabled) {
   const submitBtn = document.getElementById("submit-btn");
   if (submitBtn) submitBtn.disabled = disabled;
-  
+
   const input = document.getElementById("action-input");
   if (input) input.disabled = disabled;
 
   const chipBtns = document.querySelectorAll(".chip-btn");
-  chipBtns.forEach(btn => btn.disabled = disabled);
+  chipBtns.forEach((btn) => (btn.disabled = disabled));
 }
 
-// --- 5. Turn Rendering & DDx Updates ---
+// --- 6. Turn Rendering & DDx Updates ---
 let lastSystemNote = "";
 
 function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   const log = document.getElementById("chat-log");
 
-  // Kullanıcı mesajı varsa bas ve eşik kilidini sıfırla
   if (userMessage) {
     appendLogEntry("user", userMessage);
     hasBreachedThreshold = false;
   }
-  
-  // Sistem notunu bas (Mükerrer kontrolü ile)
+
   if (turn?.system_note && turn.system_note.trim() !== "" && turn.system_note !== lastSystemNote) {
     appendLogEntry("sistem", turn.system_note);
     const doctorNoteEl = document.getElementById("doctor-note-text");
     if (doctorNoteEl) doctorNoteEl.textContent = turn.system_note;
     lastSystemNote = turn.system_note;
   }
-  
-  // Hasta diyaloğunu bas
+
   if (turn?.patient_dialogue && turn.patient_dialogue.trim() !== "" && turn.consciousness !== "Unresponsive") {
     appendLogEntry("hasta", turn.patient_dialogue);
   }
 
-  // Vitalleri güncelle
   currentHeartRate = turn?.heart_rate || currentHeartRate;
   currentSpO2 = turn?.spo2 || currentSpO2;
   currentBP = turn?.blood_pressure || currentBP;
@@ -325,18 +463,15 @@ function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   minHeartRate = turn?.min_heart_rate || 50;
   maxHeartRate = turn?.max_heart_rate || 140;
 
-  // Telemetri kartlarını güncelle
   document.getElementById("vital-nabiz").textContent = Math.round(currentHeartRate);
   document.getElementById("vital-tansiyon").textContent = currentBP;
   document.getElementById("vital-spo2").textContent = currentSpO2;
   document.getElementById("vital-bilinc").textContent = String(currentConsciousness).toUpperCase();
   document.getElementById("turn-count").textContent = turn?.turn_no || 1;
 
-  // DDx tablosunu yenile ve logu en alta kaydır
   updateDDxBoard(turn);
   log.scrollTop = log.scrollHeight;
 
-  // Vaka sonlanma denetimi
   if (turn?.case_completed || turn?.consciousness === "Unresponsive") {
     stopGameLoop();
     setTimeout(() => finishSession(), 1500);
@@ -383,7 +518,7 @@ function updateDDxBoard(turn) {
     .join("");
 }
 
-// --- 6. Quick Action Execution & Dispatch ---
+// --- 7. Quick Action Execution & Dispatch ---
 function executeQuickAction(commandText) {
   if (isRequestInProgress || !currentSessionId) return;
   stopGameLoop();
@@ -392,13 +527,7 @@ function executeQuickAction(commandText) {
 }
 
 async function sendActionToServer(message) {
-  const reqId = Math.random().toString(36).substring(7);
-  console.log(`🚀 [İSTEK BAŞLADI] ID: #${reqId} | isRequestInProgress: ${isRequestInProgress} | Mesaj: ${message.substring(0, 45)}...`);
-
-  if (!currentSessionId || isRequestInProgress) {
-    console.warn(`🚫 [İSTEK ENGELLENDİ] ID: #${reqId} - Zaten aktif bir istek var veya oturum yok!`);
-    return;
-  }
+  if (!currentSessionId || isRequestInProgress) return;
 
   isRequestInProgress = true;
   stopGameLoop();
@@ -409,30 +538,25 @@ async function sendActionToServer(message) {
       message: message,
       current_hr: Math.round(currentHeartRate),
       current_spo2: currentSpO2,
-      current_bp: currentBP
+      current_bp: currentBP,
     };
-
-    console.log(`📤 [PAYLOAD GÖNDERİLİYOR] ID: #${reqId} -> Backend'e giden vitaller:`, payload);
 
     const res = await fetch(`${API_BASE}/session/${currentSessionId}/act`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    
+
     if (!res.ok) throw new Error("Request failed");
-    
+
     const turn = await res.json();
-    console.log(`📥 [YANIT GELDİ] ID: #${reqId} -> Gelen Stage: ${turn.turn_no} | Yeni HR: ${turn.heart_rate} | Bitti mi: ${turn.case_completed}`);
-    
     renderTurn(turn, message.startsWith("[") ? null : message, true);
   } catch (err) {
-    console.error(`❌ [İSTEK HATASI] ID: #${reqId}:`, err);
+    console.error("Action error:", err);
     startGameLoop();
   } finally {
     isRequestInProgress = false;
     setInteractionsDisabled(false);
-    console.log(`🔓 [KİLİT AÇILDI] ID: #${reqId} tamamlandı.`);
   }
 }
 
@@ -460,7 +584,6 @@ function abortSession() {
   }
 }
 
-// --- 7. Diagnostics Lab Modal ---
 function openLabModal() {
   document.getElementById("lab-modal").classList.add("active");
 }
@@ -469,7 +592,47 @@ function closeLabModal() {
   document.getElementById("lab-modal").classList.remove("active");
 }
 
-// --- 8. Scorecard & Timeline Replay ---
+// --- 8. Web Audio Outcome Sentezleyici ---
+function playOutcomeAudio(isSuccess) {
+  if (!isAudioEnabled || !audioCtx) return;
+  try {
+    const now = audioCtx.currentTime;
+    if (isSuccess) {
+      [523.25, 659.25, 783.99].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+        gain.gain.setValueAtTime(0.001, now + idx * 0.12);
+        gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.12 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.12 + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.12);
+        osc.stop(now + idx * 0.12 + 0.55);
+      });
+    } else {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(820, now);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+      gain.gain.setValueAtTime(0.25, now + 2.5);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 3.0);
+    }
+  } catch (e) {
+    console.error("Outcome audio error:", e);
+  }
+}
+
+// --- 9. Scorecard & Transition Modal ---
 async function finishSession() {
   stopGameLoop();
   stopECGAnimation();
@@ -477,31 +640,68 @@ async function finishSession() {
     const res = await fetch(`${API_BASE}/session/${currentSessionId}/end`, {
       method: "POST",
     });
-    const report = await res.json();
+    cachedReportData = await res.json();
 
-    const actualTimeouts = sessionActionLogs.filter(
-      (l) => l.tag === "Timeout Error" || l.tag === "Threshold Breach"
-    ).length;
-    const finalWrong = Math.max(report.incorrect_actions || 0, actualTimeouts);
+    const isSuccess =
+      cachedReportData.score >= 60 &&
+      !cachedReportData.status_badge.includes("FAIL") &&
+      !cachedReportData.status_badge.includes("ARREST");
 
-    document.getElementById("report-score").textContent = report.score;
-    document.getElementById("report-badge").textContent = report.status_badge || "COMPLETED";
-    document.getElementById("rep-correct").textContent = report.correct_actions || 0;
-    document.getElementById("rep-wrong").textContent = finalWrong;
-    document.getElementById("rep-reaction").textContent = `${report.reaction_score || 5}/10`;
+    const modalBadge = document.getElementById("outcome-badge");
+    const modalIcon = document.getElementById("outcome-icon");
+    const modalTitle = document.getElementById("outcome-title");
+    const modalDesc = document.getElementById("outcome-desc");
 
-    document.getElementById("report-strengths").textContent = report.strengths;
-    document.getElementById("report-mistakes").textContent = report.errors;
-    document.getElementById("report-suggestion").textContent = report.suggestions;
+    if (isSuccess) {
+      modalBadge.style.color = "#10b981";
+      modalBadge.textContent = "✅ CLINICAL STABILIZATION ACHIEVED";
+      modalIcon.textContent = "🫀✨";
+      modalTitle.textContent = "Patient Successfully Stabilized";
+      modalDesc.textContent =
+        "Timely and protocol-adherent interventions effectively reversed acute decompensation. Patient stabilized and transferred to the ICU / Cath Lab.";
+    } else {
+      modalBadge.style.color = "#ef4444";
+      modalBadge.textContent = "🚨 CRITICAL FAILURE / CARDIAC ARREST";
+      modalIcon.textContent = "⚡📉";
+      modalTitle.textContent = "Patient Entered Asystole / VF Arrest";
+      modalDesc.textContent =
+        cachedReportData.errors ||
+        "Prolonged ischemia and absence of critical stabilization orders resulted in fatal cardiovascular collapse.";
+    }
 
-    renderTimelineReplay();
-    showScreen("report");
-    drawRadarChart(report.criteria);
+    playOutcomeAudio(isSuccess);
+    document.getElementById("outcome-modal").classList.add("active");
   } catch (err) {
     alert("Error fetching report: " + err.message);
   }
 }
 
+function proceedToScorecard() {
+  document.getElementById("outcome-modal").classList.remove("active");
+  if (!cachedReportData) return;
+
+  const report = cachedReportData;
+  const actualTimeouts = sessionActionLogs.filter(
+    (l) => l.tag === "Timeout Error" || l.tag === "Threshold Breach"
+  ).length;
+  const finalWrong = Math.max(report.incorrect_actions || 0, actualTimeouts);
+
+  document.getElementById("report-score").textContent = report.score;
+  document.getElementById("report-badge").textContent = report.status_badge || "COMPLETED";
+  document.getElementById("rep-correct").textContent = report.correct_actions || 0;
+  document.getElementById("rep-wrong").textContent = finalWrong;
+  document.getElementById("rep-reaction").textContent = `${report.reaction_score || 5}/10`;
+
+  document.getElementById("report-strengths").textContent = report.strengths;
+  document.getElementById("report-mistakes").textContent = report.errors;
+  document.getElementById("report-suggestion").textContent = report.suggestions;
+
+  renderTimelineReplay();
+  showScreen("report");
+  drawRadarChart(report.criteria);
+}
+
+// --- Yenilenmiş Rozetli Görsel Timeline Replay ---
 function renderTimelineReplay() {
   const container = document.getElementById("timeline-events");
   if (!container) return;
@@ -509,14 +709,31 @@ function renderTimelineReplay() {
 
   sessionActionLogs.forEach((item) => {
     const row = document.createElement("div");
-    row.className = "timeline-item";
-    const isTimeout = item.tag.includes("Timeout") || item.tag.includes("Breach");
-    const tagColor = isTimeout ? "#ef4444" : "#38bdf8";
 
+    let typeClass = "primary";
+    let icon = "🩺";
+
+    if (item.tag.includes("Timeout")) {
+      typeClass = "danger";
+      icon = "⌛";
+    } else if (item.tag.includes("Breach")) {
+      typeClass = "danger";
+      icon = "⚡";
+    } else if (item.tag.includes("EMS") || item.tag.includes("Admission")) {
+      typeClass = "primary";
+      icon = "🚑";
+    } else if (item.tag.includes("Order") || item.tag.includes("Doctor")) {
+      typeClass = "success";
+      icon = "💊";
+    }
+
+    row.className = `timeline-item ${typeClass}`;
     row.innerHTML = `
-      <span class="timeline-time">[+${item.time}]</span>
-      <strong style="color: ${tagColor};">${item.tag}:</strong>
-      <span class="timeline-action">${item.desc}</span>
+      <span class="timeline-badge">${icon} +${item.time}</span>
+      <div class="timeline-body">
+        <strong class="timeline-tag">${item.tag}:</strong>
+        <span class="timeline-action">${item.desc}</span>
+      </div>
     `;
     container.appendChild(row);
   });
@@ -524,12 +741,15 @@ function renderTimelineReplay() {
 
 function returnToMenu() {
   currentSessionId = null;
+  hasBreachedThreshold = false;
+  isRequestInProgress = false;
   stopGameLoop();
   stopECGAnimation();
   showScreen("select");
   loadScenarios();
 }
 
+// --- Yenilenmiş Klinik Yetkinlik Radar Grafiği ---
 function drawRadarChart(criteria = {}) {
   const canvas = document.getElementById("radar-canvas");
   if (!canvas) return;
@@ -542,11 +762,12 @@ function drawRadarChart(criteria = {}) {
 
   ctx.clearRect(0, 0, width, height);
 
+  // Tıbbi Performans Yetkinlik Eksenleri (Geriye Dönük Uyumluluklu)
   const axes = [
-    { label: "Educational Impact", val: criteria?.educational_impact ?? 18 },
-    { label: "Creative AI Use", val: criteria?.creative_ai_use ?? 18 },
-    { label: "Technical Execution", val: criteria?.technical_execution ?? 18 },
-    { label: "Pitch & Demo", val: criteria?.pitch_demo ?? 18 },
+    { label: "Protocol Adherence", val: criteria?.protocol_adherence ?? criteria?.educational_impact ?? 18 },
+    { label: "Diagnostic Accuracy", val: criteria?.diagnostic_accuracy ?? criteria?.creative_ai_use ?? 18 },
+    { label: "Patient Safety", val: criteria?.patient_safety ?? criteria?.technical_execution ?? 18 },
+    { label: "Pharmacology & Dosage", val: criteria?.pharmacology_precision ?? criteria?.pitch_demo ?? 18 },
   ];
 
   const totalAxes = axes.length;
@@ -561,7 +782,7 @@ function drawRadarChart(criteria = {}) {
       else ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.15)";
     ctx.stroke();
   }
 
@@ -577,7 +798,7 @@ function drawRadarChart(criteria = {}) {
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(x, y);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
     ctx.stroke();
 
     const lx = cx + Math.cos(angle) * (radius + 24);
@@ -595,14 +816,16 @@ function drawRadarChart(criteria = {}) {
     else ctx.lineTo(x, y);
   }
   ctx.closePath();
-  ctx.fillStyle = "rgba(16, 185, 129, 0.35)";
+  ctx.fillStyle = "rgba(56, 189, 248, 0.35)";
   ctx.fill();
-  ctx.strokeStyle = "#10b981";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#38bdf8";
+  ctx.lineWidth = 2.2;
+  ctx.shadowBlur = 8;
+  ctx.shadowColor = "#38bdf8";
   ctx.stroke();
 }
 
-// --- 9. Synchronized Real-Time Telemetry ECG & Audio Engine ---
+// --- 10. Synchronized Real-Time Telemetry ECG (Flatline & Artery Aware) ---
 let ecgAnimationId = null;
 let lastFrameTime = null;
 let timeSinceLastBeat = 0;
@@ -629,6 +852,7 @@ function initECGAnimation() {
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
+    const isFlatline = currentConsciousness === "Unresponsive" || currentHeartRate <= 30;
     const validHR = Math.max(35, Math.min(220, currentHeartRate));
     const beatInterval = 60 / validHR;
 
@@ -646,25 +870,28 @@ function initECGAnimation() {
     }
 
     let y = midY;
-    const t = timeSinceLastBeat;
 
-    if (t >= 0.04 && t < 0.12) {
-      y = midY - 6 * Math.sin(((t - 0.04) / 0.08) * Math.PI);
-    } else if (t >= 0.13 && t < 0.16) {
-      y = midY + 4;
-    } else if (t >= 0.16 && t < 0.22) {
-      y = midY - 48 * Math.sin(((t - 0.16) / 0.06) * Math.PI);
-
-      if (!hasBeepedThisBeat && t >= 0.18) {
-        playBedsideBeep();
-        hasBeepedThisBeat = true;
-      }
-    } else if (t >= 0.22 && t < 0.26) {
-      y = midY + 16;
-    } else if (t >= 0.28 && t < 0.40) {
-      y = midY - 12 * Math.sin(((t - 0.28) / 0.12) * Math.PI);
+    if (isFlatline) {
+      y = midY + (Math.random() - 0.5) * 2;
     } else {
-      y = midY + (Math.random() - 0.5) * 1.5;
+      const t = timeSinceLastBeat;
+      if (t >= 0.04 && t < 0.12) {
+        y = midY - 6 * Math.sin(((t - 0.04) / 0.08) * Math.PI);
+      } else if (t >= 0.13 && t < 0.16) {
+        y = midY + 4;
+      } else if (t >= 0.16 && t < 0.22) {
+        y = midY - 48 * Math.sin(((t - 0.16) / 0.06) * Math.PI);
+        if (!hasBeepedThisBeat && t >= 0.18) {
+          playBedsideBeep();
+          hasBeepedThisBeat = true;
+        }
+      } else if (t >= 0.22 && t < 0.26) {
+        y = midY + 16;
+      } else if (t >= 0.28 && t < 0.40) {
+        y = midY - 12 * Math.sin(((t - 0.28) / 0.12) * Math.PI);
+      } else {
+        y = midY + (Math.random() - 0.5) * 1.5;
+      }
     }
 
     points.push({ x, y });
@@ -672,10 +899,10 @@ function initECGAnimation() {
     ctx.fillStyle = "rgba(3, 7, 18, 0.16)";
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = "#38bdf8";
+    ctx.strokeStyle = isFlatline ? "#ef4444" : "#38bdf8";
     ctx.lineWidth = 2.2;
     ctx.shadowBlur = 9;
-    ctx.shadowColor = "#38bdf8";
+    ctx.shadowColor = isFlatline ? "#ef4444" : "#38bdf8";
 
     ctx.beginPath();
     for (let i = 0; i < points.length; i++) {

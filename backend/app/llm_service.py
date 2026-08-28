@@ -30,15 +30,17 @@ def start_scenario(scenario_prompt: str) -> dict:
 def process_turn(scenario_prompt: str, history: list[dict], user_message: str) -> dict:
     conversation = history + [{"role": "user", "content": user_message}]
     return _call_llm(scenario_prompt, conversation)
+
+
 def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     report_instruction = """
-    The clinical simulation has ended. You MUST write the ENTIRE evaluation STRICTLY IN ENGLISH.
+    The clinical simulation has ended. You MUST evaluate the physician's clinical performance STRICTLY IN ENGLISH.
     Do NOT use Turkish or any other language under any circumstances.
 
     SCORING STANDARDS:
     - If the user performed zero clinical interventions, accumulated timeouts, or allowed patient arrest: Overall score MUST be 0-15.
-    - If appropriate emergency protocol was executed: Overall score 80-100.
-    - Score each of the 4 jury criteria out of 25.
+    - If appropriate emergency protocol was executed (e.g. MONA, airway stabilization, rapid fluid/defib): Overall score 80-100.
+    - Score each of the 4 Clinical Competencies out of 25.
 
     OUTPUT FORMAT (JSON ONLY - ALL TEXT VALUES MUST BE IN ENGLISH):
     {
@@ -48,14 +50,14 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
       "incorrect_actions": 0,
       "reaction_score": 8,
       "criteria": {
-        "educational_impact": 22,
-        "creative_ai_use": 21,
-        "technical_execution": 23,
-        "pitch_demo": 22
+        "protocol_adherence": 22,
+        "diagnostic_accuracy": 21,
+        "patient_safety": 23,
+        "pharmacology_precision": 22
       },
-      "strengths": "Provide concise strengths strictly in English.",
-      "errors": "Provide error analysis and missed steps strictly in English.",
-      "suggestions": "Provide clinical study recommendations strictly in English."
+      "strengths": "Concise protocol adherence and clinical strengths strictly in English.",
+      "errors": "Concise analysis of missed steps, dangerous delays, or contraindications strictly in English.",
+      "suggestions": "Actionable guideline-based clinical study recommendations strictly in English."
     }
     """
     conversation = history + [{"role": "user", "content": report_instruction}]

@@ -1034,10 +1034,12 @@ body {
   margin-top: 4px;
 }
 
-/* Timeline Replay Bar */
+/* ==========================================================================
+   Görselleştirilmiş Timeline Replay Stilleri
+   ========================================================================== */
 .timeline-container {
-  background: rgba(30, 41, 59, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 16px;
   margin-bottom: 20px;
@@ -1054,29 +1056,73 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 180px;
+  max-height: 200px;
   overflow-y: auto;
+  padding-right: 4px;
+}
+
+.timeline-events::-webkit-scrollbar {
+  width: 6px;
+}
+
+.timeline-events::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.3);
+  border-radius: 8px;
 }
 
 .timeline-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 0.8rem;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.6);
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
 }
 
-.timeline-time {
+.timeline-item.danger {
+  border-left: 4px solid #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.timeline-item.success {
+  border-left: 4px solid #10b981;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.timeline-item.primary {
+  border-left: 4px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.timeline-badge {
   font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
   font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.8);
   color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.timeline-body {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  font-size: 0.82rem;
+}
+
+.timeline-tag {
+  color: #f1f5f9;
+  font-weight: 700;
 }
 
 .timeline-action {
-  color: #f1f5f9;
-  flex: 1;
+  color: #cbd5e1;
 }
 
 /* Scorecard Feedback Cards */

@@ -83,9 +83,7 @@
           <!-- Feature: Dynamic Differential Diagnosis (DDx) Board -->
           <div class="ddx-card">
             <div class="ddx-header">🎯 DIFFERENTIAL DIAGNOSIS (DDx)</div>
-            <div id="ddx-list-container" class="ddx-list">
-              <!-- Rendered dynamically by app.js based on the active scenario -->
-            </div>
+            <div id="ddx-list-container" class="ddx-list"></div>
           </div>
 
           <div class="doctor-notes-card">
@@ -155,21 +153,14 @@
 
           <div id="chat-log" class="chat-log"></div>
 
-          <!-- Feature: Quick-Action Clinical Chips -->
-          <div class="quick-action-bar">
-            <button type="button" class="chip-btn" onclick="executeQuickAction('Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)')">🫁 High-Flow O2</button>
-            <button type="button" class="chip-btn" onclick="executeQuickAction('Perform immediate 12-Lead ECG and monitor continuous rhythm')">📈 12-Lead ECG</button>
-            <button type="button" class="chip-btn" onclick="executeQuickAction('Administer 325mg chewable Aspirin PO')">💊 Aspirin 325mg</button>
-            <button type="button" class="chip-btn" onclick="executeQuickAction('Establish dual large-bore 18G IV peripheral lines')">🩸 Dual 18G IV</button>
-            <button type="button" class="chip-btn" onclick="executeQuickAction('Order Stat Cardiac Enzymes, Troponin-I, and Arterial Blood Gas')">🧪 Stat Labs</button>
-            <button type="button" class="chip-btn warning" onclick="executeQuickAction('Prepare Defibrillator and charge to 200J Biphasic')">⚡ Defib 200J</button>
-          </div>
+          <!-- Dynamic Quick Action Container -->
+          <div id="quick-action-container" class="quick-action-bar"></div>
 
           <form id="action-form" class="action-form">
             <input
               id="action-input"
               type="text"
-              placeholder="Enter custom clinical order... (e.g. /act Sublingual Nitroglycerin 0.4mg, draw repeat Troponin)"
+              placeholder="Enter custom clinical order... (e.g. Sublingual Nitroglycerin 0.4mg, draw repeat Troponin)"
               autocomplete="off"
             />
             <button id="submit-btn" type="submit">EXECUTE</button>
@@ -276,30 +267,33 @@
       </div>
     </div>
 
-    <!-- 5. Feature: Interactive Diagnostics & Lab Results Modal -->
+    <!-- 5. Feature: Dynamic Diagnostics & Lab Results Modal -->
     <div id="lab-modal" class="modal-overlay">
       <div class="modal-card wide">
         <div class="modal-badge">🔬 STAT EMERGENCY DIAGNOSTICS</div>
         <h2>Bedside Telemetry & Lab Panel</h2>
-        <div class="lab-grid">
-          <div class="lab-box">
-            <h4>12-LEAD TELEMETRY FINDINGS</h4>
-            <p><strong>Rhythm:</strong> Sinus Tachycardia @ 112 bpm</p>
-            <p><strong>ST-Segment:</strong> >2mm elevation in leads V1-V4 (Acute Anterior STEMI)</p>
-            <p><strong>Reciprocal Changes:</strong> ST-depression in II, III, aVF</p>
-          </div>
-          <div class="lab-box">
-            <h4>STAT BIOMARKERS</h4>
-            <p><strong>High-Sensitivity Troponin-I:</strong> <span class="text-danger">1.82 ng/mL (High)</span></p>
-            <p><strong>Serum Lactate:</strong> 2.4 mmol/L</p>
-            <p><strong>Arterial Blood Gas (ABG):</strong> pH 7.34, pO2 82, pCO2 38</p>
-            <p><strong>Blood Glucose:</strong> 138 mg/dL</p>
-          </div>
-        </div>
+        <div id="lab-content-container" class="lab-grid"></div>
         <button class="btn-modal" onclick="closeLabModal()">CLOSE DIAGNOSTICS</button>
       </div>
     </div>
 
+    <!-- 6. Feature: Clinical Outcome Pop-up Modal -->
+    <div id="outcome-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div id="outcome-badge" class="modal-badge">🚨 CLINICAL OUTCOME NOTICE</div>
+        <div id="outcome-icon" style="font-size: 3.2rem; margin: 10px 0;">⚡</div>
+        <h2 id="outcome-title" style="margin-bottom: 12px; color: #fff;">Resuscitation Terminated</h2>
+        <div class="modal-body">
+          <p id="outcome-desc" class="modal-text" style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 24px;">
+            Patient state has been determined.
+          </p>
+        </div>
+        <button id="outcome-proceed-btn" class="btn-modal" onclick="proceedToScorecard()">
+          VIEW FULL EVALUATION & JURY REPORT 📊
+        </button>
+      </div>
+    </div>
+    
   </div>
 
   <script src="app.js"></script>
