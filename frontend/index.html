@@ -347,6 +347,11 @@
           <p id="outcome-desc" class="modal-text" style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 24px;">
             Patient state has been determined.
           </p>
+          <div id="outcome-loading" class="outcome-loading" aria-live="polite">
+            <span class="outcome-spinner" aria-hidden="true"></span>
+            <span>Generating evaluation report</span>
+            <span class="loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          </div>
         </div>
         <button id="outcome-proceed-btn" class="btn-modal" onclick="proceedToScorecard()">
           VIEW FULL EVALUATION & JURY REPORT 📊
@@ -356,7 +361,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260828-12"></script>
-  <script src="assets/js/app.js?v=20260828-12"></script>
+  <script src="assets/js/config.js?v=20260828-13"></script>
+  <script src="assets/js/app.js?v=20260828-13"></script>
 </body>
 </html>

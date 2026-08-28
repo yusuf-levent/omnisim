@@ -1118,6 +1118,29 @@ async function finishSession() {
 
   stopGameLoop();
   stopECGAnimation();
+
+  const modalBadge = document.getElementById("outcome-badge");
+  const modalIcon = document.getElementById("outcome-icon");
+  const modalTitle = document.getElementById("outcome-title");
+  const modalDesc = document.getElementById("outcome-desc");
+  const modalLoading = document.getElementById("outcome-loading");
+  const proceedBtn = document.getElementById("outcome-proceed-btn");
+
+  if (modalBadge) {
+    modalBadge.style.color = "#38bdf8";
+    modalBadge.textContent = "📊 JURY EVALUATION IN PROGRESS";
+  }
+  if (modalIcon) modalIcon.textContent = "⏳";
+  if (modalTitle) modalTitle.textContent = "Generating Case Report";
+  if (modalDesc) {
+    modalDesc.textContent =
+      "The simulator is reviewing the recorded interventions, timing, vital trends, and protocol adherence.";
+  }
+  if (modalLoading) modalLoading.style.display = "flex";
+  if (proceedBtn) proceedBtn.style.display = "none";
+
+  document.getElementById("outcome-modal").classList.add("active");
+
   try {
     const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/end`), {
       method: "POST",
@@ -1129,11 +1152,6 @@ async function finishSession() {
       cachedReportData.score >= 60 &&
       !cachedReportData.status_badge.includes("FAIL") &&
       !cachedReportData.status_badge.includes("ARREST");
-
-    const modalBadge = document.getElementById("outcome-badge");
-    const modalIcon = document.getElementById("outcome-icon");
-    const modalTitle = document.getElementById("outcome-title");
-    const modalDesc = document.getElementById("outcome-desc");
 
     if (isSuccess) {
       modalBadge.style.color = "#10b981";
@@ -1152,10 +1170,19 @@ async function finishSession() {
         "Prolonged ischemia and absence of critical stabilization orders resulted in fatal cardiovascular collapse.";
     }
 
+    if (modalLoading) modalLoading.style.display = "none";
+    if (proceedBtn) proceedBtn.style.display = "block";
     playOutcomeAudio(isSuccess);
-    document.getElementById("outcome-modal").classList.add("active");
   } catch (err) {
-    alert("Error fetching report: " + err.message);
+    if (modalBadge) {
+      modalBadge.style.color = "#ef4444";
+      modalBadge.textContent = "⚠️ EVALUATION FAILED";
+    }
+    if (modalIcon) modalIcon.textContent = "⚠️";
+    if (modalTitle) modalTitle.textContent = "Report Could Not Be Generated";
+    if (modalDesc) modalDesc.textContent = err.message;
+    if (modalLoading) modalLoading.style.display = "none";
+    if (proceedBtn) proceedBtn.style.display = "none";
   } finally {
     isEndingSession = false;
   }
