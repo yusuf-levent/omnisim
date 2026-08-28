@@ -641,6 +641,9 @@ function appendLogEntry(type, text) {
   entry.className = `log-entry ${type}`;
   entry.textContent = text;
   log.appendChild(entry);
+  requestAnimationFrame(() => {
+    log.scrollTop = log.scrollHeight;
+  });
 }
 
 function updateDDxBoard(turn) {
