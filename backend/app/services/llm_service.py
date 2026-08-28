@@ -81,6 +81,8 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     report_instruction = """
     The clinical simulation has ended. You MUST evaluate the physician's clinical performance STRICTLY IN ENGLISH according to rigorous international OSCE rubrics (AHA, ERC, BTS, GINA, SSC, ATLS).
     Do NOT use Turkish under any circumstances.
+    Use the GROUND-TRUTH ACTION AUDIT TRAIL in the conversation as the authoritative source of physician actions.
+    Never criticize the physician for omitting an intervention that appears in that audit trail.
 
     SCORING STANDARDS:
     1. EXCELLENT STABILIZATION & PROTOCOL ADHERENCE (90-100 / OUTSTANDING):

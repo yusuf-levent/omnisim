@@ -4,24 +4,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
 
 from . import models
+from .core.config import get_frontend_origins
 from .db.database import get_db
 from .scenarios import SCENARIOS, get_scenario
 from .schemas import ActionRequest, TurnResponse, ReportResponse, SessionStartResponse
 from .services import llm_service
 
 MAX_TURNS = 15
+DEFAULT_REPORT_CRITERIA = {
+    "protocol_adherence": 15,
+    "diagnostic_accuracy": 15,
+    "patient_safety": 15,
+    "pharmacology_precision": 15,
+}
 
 app = FastAPI(title="OmniSim AI - Clinical Case Simulator")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_frontend_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-def _history_from_logs(session: models.SimSession) -> list[dict]:
+def _history_from_logs(session: models.SimSession, limit: int | None = 6) -> list[dict]:
     history = []
     vitals_map = {}
     if hasattr(session, "vitals") and session.vitals:
@@ -44,8 +51,118 @@ def _history_from_logs(session: models.SimSession) -> list[dict]:
             "role": "assistant",
             "content": json.dumps(assistant_payload, ensure_ascii=False)
         })
-    # Son turları tut (ilkini değil) — model her seferinde en güncel bağlamı görmeli
-    return history[-6:]
+
+    if limit is None:
+        return history
+    # Live turns stay short for latency, while final reports use the full audit trail.
+    return history[-limit:]
+
+
+def _report_history_from_logs(session: models.SimSession) -> list[dict]:
+    history = _history_from_logs(session, limit=None)
+    action_lines = []
+
+    for log in (session.logs or []):
+        if log.user_message:
+            vital = next((v for v in (session.vitals or []) if v.turn_no == log.turn_no), None)
+            vital_text = ""
+            if vital:
+                vital_text = (
+                    f" -> resulting vitals: HR {vital.heart_rate}, "
+                    f"BP {vital.blood_pressure}, SpO2 {vital.spo2}, "
+                    f"consciousness {vital.consciousness}"
+                )
+            action_lines.append(f"Turn {log.turn_no}: {log.user_message}{vital_text}")
+
+    audit_trail = "\n".join(action_lines) or "No physician interventions were recorded."
+    history.append({
+        "role": "user",
+        "content": (
+            "GROUND-TRUTH ACTION AUDIT TRAIL FOR SCORING. "
+            "Do not mark an intervention as omitted if it appears in this list:\n"
+            f"{audit_trail}"
+        ),
+    })
+    return history
+
+
+def _criteria_from_report(report: models.ReportResult) -> dict[str, int]:
+    if report.criteria_json:
+        try:
+            criteria = json.loads(report.criteria_json)
+            if isinstance(criteria, dict):
+                return {key: int(criteria.get(key, val)) for key, val in DEFAULT_REPORT_CRITERIA.items()}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+    return DEFAULT_REPORT_CRITERIA.copy()
+
+
+def _clean_report_criteria(raw_criteria: object) -> dict[str, int]:
+    if not isinstance(raw_criteria, dict):
+        return DEFAULT_REPORT_CRITERIA.copy()
+    cleaned = {}
+    for key, default in DEFAULT_REPORT_CRITERIA.items():
+        try:
+            cleaned[key] = max(0, min(25, int(raw_criteria.get(key, default))))
+        except (TypeError, ValueError):
+            cleaned[key] = default
+    return cleaned
+
+
+def _fallback_report(session: models.SimSession) -> dict:
+    action_text = "\n".join(
+        log.user_message or ""
+        for log in (session.logs or [])
+        if log.user_message
+    ).lower()
+    supportive_terms = (
+        "oxygen",
+        "o2",
+        "aspirin",
+        "ecg",
+        "troponin",
+        "labs",
+        "nitroglycerin",
+        "fluid",
+        "saline",
+        "epinephrine",
+        "naloxone",
+        "magnesium",
+        "calcium",
+        "insulin",
+        "dextrose",
+        "antibiotic",
+        "ceftriaxone",
+        "norepinephrine",
+        "adenosine",
+        "cardioversion",
+        "thrombolysis",
+        "cooling",
+        "catheterization",
+        "cath lab",
+    )
+    matched = sorted({term for term in supportive_terms if term in action_text})
+    correct_actions = len(matched)
+    timeout_count = action_text.count("[timeout") + action_text.count("[critical threshold")
+    score = max(20, min(85, 35 + correct_actions * 8 - timeout_count * 12))
+    criteria_score = max(5, min(22, score // 4))
+
+    return {
+        "score": score,
+        "status_badge": "COMPETENT" if score >= 60 else "NEEDS IMPROVEMENT",
+        "correct_actions": correct_actions,
+        "incorrect_actions": timeout_count,
+        "reaction_score": max(1, min(10, 10 - timeout_count * 2)),
+        "criteria": {
+            "protocol_adherence": criteria_score,
+            "diagnostic_accuracy": criteria_score,
+            "patient_safety": criteria_score,
+            "pharmacology_precision": criteria_score,
+        },
+        "strengths": "The recorded actions include appropriate stabilizing interventions from the case timeline.",
+        "errors": "Automated AI scoring was unavailable, so this fallback report avoids marking recorded interventions as omitted.",
+        "suggestions": "Review the full timeline and compare the intervention sequence against the relevant emergency protocol.",
+    }
 
 
 def _fallback_turn(action: ActionRequest) -> dict:
@@ -267,28 +384,32 @@ def end_session(session_id: str, db: DBSession = Depends(get_db)):
         return ReportResponse(
             session_id=session_id,
             score=existing_report.score,
-            status_badge="COMPLETED",
-            correct_actions=0,
-            incorrect_actions=0,
-            reaction_score=5,
-            criteria={
-                "protocol_adherence": 15,
-                "diagnostic_accuracy": 15,
-                "patient_safety": 15,
-                "pharmacology_precision": 15,
-            },
+            status_badge=existing_report.status_badge or "COMPLETED",
+            correct_actions=existing_report.correct_actions or 0,
+            incorrect_actions=existing_report.incorrect_actions or 0,
+            reaction_score=existing_report.reaction_score or 5,
+            criteria=_criteria_from_report(existing_report),
             strengths=existing_report.strengths,
             errors=existing_report.errors,
             suggestions=existing_report.suggestions,
         )
 
     scenario = get_scenario(session.scenario_type)
-    history = _history_from_logs(session)
-    result = llm_service.generate_report(scenario["prompt"], history)
+    history = _report_history_from_logs(session)
+    try:
+        result = llm_service.generate_report(scenario["prompt"], history)
+    except llm_service.LLMServiceError:
+        result = _fallback_report(session)
+    criteria = _clean_report_criteria(result.get("criteria", DEFAULT_REPORT_CRITERIA))
 
     report = models.ReportResult(
         session_id=session_id,
         score=int(result.get("score", 0)),
+        status_badge=str(result.get("status_badge", "COMPLETED")),
+        correct_actions=int(result.get("correct_actions", 0)),
+        incorrect_actions=int(result.get("incorrect_actions", 0)),
+        reaction_score=int(result.get("reaction_score", 5)),
+        criteria_json=json.dumps(criteria, ensure_ascii=False),
         strengths=str(result.get("strengths", "")),
         errors=str(result.get("errors", "")),
         suggestions=str(result.get("suggestions", "")),
@@ -304,12 +425,7 @@ def end_session(session_id: str, db: DBSession = Depends(get_db)):
         correct_actions=int(result.get("correct_actions", 0)),
         incorrect_actions=int(result.get("incorrect_actions", 0)),
         reaction_score=int(result.get("reaction_score", 5)),
-        criteria=result.get("criteria", {
-            "protocol_adherence": 15,
-            "diagnostic_accuracy": 15,
-            "patient_safety": 15,
-            "pharmacology_precision": 15,
-        }),
+        criteria=criteria,
         strengths=str(result.get("strengths", "No entries recorded")),
         errors=str(result.get("errors", "No critical errors recorded")),
         suggestions=str(result.get("suggestions", "Review clinical guidelines.")),

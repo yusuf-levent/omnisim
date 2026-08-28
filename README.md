@@ -1,142 +1,166 @@
 # OmniSim AI
 
-Hata yapmanın güvenli olduğu, AI destekli pedagojik simülasyon platformu.
-MVP kapsamı: tek modül (Kalp Krizi vakası), tek vaka tipi, 6 tur, karne ekranı.
+OmniSim AI is an AI-powered clinical decision simulation platform for emergency
+training. It gives learners a safe place to make high-pressure decisions, see
+patient vitals change, and receive an OSCE-style performance report after the
+case.
 
-## Proje Yapısı
+Live demo: https://omni.weetis.com/
 
-```
+## What It Does
+
+- Runs interactive emergency medicine scenarios with AI-generated patient
+  dialogue, clinical notes, vital responses, and final scoring.
+- Includes 20 active cases such as STEMI, anaphylaxis, status asthmaticus,
+  tension pneumothorax, DKA, sepsis, eclampsia, pediatric SVT, and massive PE.
+- Supports two modes:
+  - Guided: scenario-specific quick action buttons.
+  - Expert: free-text clinical orders only.
+- Shows real-time bedside telemetry, vitals, differential diagnosis estimates,
+  lab/ECG panels, action timelines, and final educational feedback.
+- Stores session logs, vital states, and evaluation reports through a FastAPI
+  backend with SQLAlchemy and Alembic migrations.
+
+## Hackathon Fit
+
+The project targets the education challenge by turning AI into an active
+training partner rather than a passive chatbot. Learners practice clinical
+reasoning under time pressure, make interventions, and receive structured
+feedback on protocol adherence, diagnostic accuracy, patient safety, and
+pharmacology precision.
+
+The long-term vision is to expand OmniSim beyond emergency medicine:
+
+- user-created scenarios,
+- a public scenario discovery page,
+- scenario packs for different professions and domains,
+- instructor dashboards,
+- repeatable assessment history,
+- and domain-specific simulation templates for healthcare, crisis response,
+  legal training, customer support, sales, engineering operations, and other
+  decision-heavy fields.
+
+## Architecture
+
+```text
 omnisim/
 ├── backend/
 │   ├── app/
-│   │   ├── core/
-│   │   │   └── config.py    # Ortam değişkenleri ve uygulama ayarları
-│   │   ├── db/
-│   │   │   └── database.py  # SQLite bağlantısı
-│   │   ├── services/
-│   │   │   └── llm_service.py # LLM ile konuşan tek katman
-│   │   ├── main.py          # FastAPI endpoint'leri
-│   │   ├── models.py        # 4 tablo: SimSession, VitalState, InteractionLog, ReportResult
-│   │   ├── schemas.py       # Pydantic şemaları
-│   │   └── scenarios/       # MODÜLERLİK BURADA - yeni vaka eklemek için buraya dosya at
-│   │       ├── __init__.py  # vaka tipi registry
-│   │       └── acute_coronary_syndrome.py
-│   ├── requirements.txt
-│   └── .env.example
-└── frontend/
-    ├── index.html
-    └── assets/
-        ├── css/
-        │   └── style.css
-        └── js/
-            └── app.js        # vanilla JS, framework yok
+│   │   ├── core/          # Environment and runtime settings
+│   │   ├── db/            # SQLAlchemy database setup
+│   │   ├── services/      # LLM provider integration
+│   │   ├── scenarios/     # Modular scenario prompts and registry
+│   │   ├── main.py        # FastAPI routes
+│   │   ├── models.py      # Session, vitals, logs, reports
+│   │   └── schemas.py     # API response/request schemas
+│   ├── alembic/           # Database migrations
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
+│   ├── index.html
+│   └── assets/
+│       ├── css/style.css
+│       └── js/
+│           ├── app.js
+│           └── config.js
+├── render.yaml
+└── README.md
 ```
 
-## Kurulum (Backend)
+## Backend Setup
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
+```
 
-cp .env.example .env
-# .env dosyasını aç, OPENAI_API_KEY'i gerçek key'inle değiştir
+On Windows:
 
+```powershell
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file in `backend/`:
+
+```env
+GROQ_API_KEY=your_groq_api_key
+LLM_MODEL=qwen/qwen3.8-27b
+DATABASE_URL=sqlite:///./omnisim.db
+FRONTEND_ORIGINS=https://omni.weetis.com,http://localhost:5500,http://127.0.0.1:5500
+```
+
+Run migrations and start the API:
+
+```bash
+python -m alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend `http://localhost:8000` adresinde çalışmaya başlar.
-API dokümantasyonunu görmek için: `http://localhost:8000/docs`
+API docs: http://localhost:8000/docs
 
-## Kurulum (Frontend)
+## Frontend Setup
 
-Build sistemi yok, tek yapman gereken `frontend/index.html`'i bir tarayıcıda açmak
-veya basit bir static server ile servis etmek:
+The frontend is static and does not require a build step.
 
 ```bash
 cd frontend
 python -m http.server 5500
 ```
 
-Sonra `http://localhost:5500` adresini aç.
+Open http://localhost:5500.
 
-**Not:** `frontend/assets/js/app.js` içindeki `API_BASE` değişkeni backend'in adresini gösteriyor,
-lokal geliştirmede `http://localhost:8000` olarak kalabilir. Deploy ettiğinde
-gerçek backend URL'iyle değiştir.
+For deployment, set the backend URL in `frontend/assets/js/config.js`:
 
-## Yeni Vaka Tipi Ekleme (Modülerlik)
-
-1. `backend/app/scenarios/` klasörüne yeni bir `.py` dosyası ekle (örn. `goz_muayenesi.py`)
-2. İçine mevcut vaka dosyalarındaki formatta bir `SCENARIO_PROMPT` yaz
-3. `scenarios/__init__.py` içindeki `SCENARIOS` dict'ine yeni satırı ekle, `enabled: True` yap
-
-Başka hiçbir dosyayı değiştirmen gerekmiyor.
-
-## Deploy
-
-### Backend: Render + Docker
-
-Repo kökünde `render.yaml`, backend içinde `Dockerfile` hazır. Render'da Docker dışında runtime seçme.
-
-1. Kodu GitHub'a push et.
-2. Render Dashboard'da **New +** → **Blueprint** seç.
-3. Bu repo'yu bağla; Render kökteki `render.yaml` dosyasını okuyacak.
-4. `GROQ_API_KEY` ortam değişkenini Render'da gir.
-5. Deploy tamamlanınca backend URL'ini not al, örn. `https://omnisim-backend.onrender.com`.
-
-Render web servislerinde uygulama `PORT` ortam değişkenine bağlanır; Dockerfile bunu otomatik kullanıyor.
-
-Render'da manuel Docker Web Service oluşturursan:
-
-- Name: `omnisim-backend`
-- Project: boş bırakılabilir
-- Language: `Docker`
-- Branch: `main`
-- Region: `Frankfurt`
-- Root Directory: boş bırak
-- Dockerfile Path: `./backend/Dockerfile`
-- Docker Build Context Directory: boş bırak veya `.`
-- Plan: test/demo için `Free`
-- Environment Variables:
-  - `GROQ_API_KEY`: Groq API anahtarın
-  - `LLM_MODEL`: `qwen/qwen3.8-27b`
-  - `DATABASE_URL`: boş bırakırsan SQLite kullanır; kalıcı veri için Postgres bağlantı adresi ver
-
-### Alembic
-
-Veritabanı migration sistemi hazır. Yeni model değişikliğinden sonra backend klasöründe:
-
-```bash
-python -m alembic revision --autogenerate -m "change description"
-python -m alembic upgrade head
+```js
+window.OMNISIM_API_BASE = "https://omnisim.onrender.com";
 ```
 
-Docker/Render başlangıcında `python -m alembic upgrade head` otomatik çalışır.
+## Deployment
+
+### Backend: Render
+
+The repository includes `render.yaml` and `backend/Dockerfile`.
+
+Required Render environment variables:
+
+- `GROQ_API_KEY`
+- `LLM_MODEL`, default: `qwen/qwen3.8-27b`
+- `DATABASE_URL`, optional. If omitted, SQLite is used.
+- `FRONTEND_ORIGINS`, optional. Default includes the live site and local dev
+  origins.
+
+The Docker startup command runs Alembic migrations automatically before starting
+FastAPI.
 
 ### Frontend: Cloudflare Pages
 
-Frontend statik çalışıyor; build sistemi yok.
+- Framework preset: None
+- Build command: empty or `exit 0`
+- Build output directory: `frontend`
 
-1. Cloudflare Pages'te **Create a project** → Git repo'yu seç.
-2. Framework preset: **None**.
-3. Build command: boş bırak veya `exit 0`.
-4. Build output directory: `frontend`.
-5. Deploy öncesi `frontend/assets/js/config.js` içindeki backend adresini Render URL'iyle değiştir:
+## Adding a Scenario
 
-```js
-window.OMNISIM_API_BASE = "https://omnisim-backend.onrender.com";
-```
+1. Add a new Python file under `backend/app/scenarios/`.
+2. Define a `SCENARIO_PROMPT` using the existing scenario format.
+3. Import it in `backend/app/scenarios/__init__.py`.
+4. Add it to the `SCENARIOS` registry with `enabled: True`.
 
-Deploy sonrası Cloudflare Pages URL'i üzerinden frontend açılır ve API isteklerini Render backend'e gönderir.
+No frontend code is required for the scenario card itself. Add quick actions,
+DDx, and lab panel entries in `frontend/assets/js/app.js` when the scenario
+needs custom UI support.
 
-## Mimari Notlar
+## Reliability Notes
 
-- Her tur, geçmiş konuşmanın tamamıyla birlikte LLM'e gönderiliyor (stateless
-  değil, LLM her seferinde tüm bağlamı görüyor).
-- Nabız/tansiyon değişimi bir turda ±10 ile sınırlı (prompt içinde tanımlı) -
-  LLM'in mantıksız sıçrama yapmasını engellemek için.
-- Vaka en fazla 6 tur sürer - LLM "bitti" demese bile backend zorla bitirir,
-  demo sırasında "vaka hiç bitmiyor" riskini ortadan kaldırır.
-- Decision tree / kural motoru KULLANILMIYOR - her tur doğrudan LLM'e gidiyor,
-  hızlı/ucuz model (gpt-4o-mini) seçilerek gecikme riski azaltıldı.
+- Live turns use a short recent-history window for latency.
+- Final reports use the full clinical action audit trail so recorded
+  interventions are not lost during scoring.
+- Report metrics are persisted and reused consistently when a completed report
+  is opened again.
+- If the LLM provider is temporarily unavailable during report generation, the
+  backend returns a conservative fallback report from the recorded action log
+  instead of leaving the demo without an evaluation screen.
