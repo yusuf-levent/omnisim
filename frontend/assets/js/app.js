@@ -19,6 +19,7 @@ let hasBreachedThreshold = false;
 let isEndingSession = false;
 let selectedDifficulty = "easy";
 let pendingScenarioKey = null;
+let pendingSessionReady = false;
 
 // Event Timeline Tracking
 let sessionActionLogs = [];
@@ -662,21 +663,8 @@ function renderLabModal() {
 }
 
 // --- 4. Start Session & Modal Handling ---
-function openDifficultyModal(scenarioType) {
-  pendingScenarioKey = scenarioType;
-  document.getElementById("difficulty-modal")?.classList.add("active");
-}
-
-function closeDifficultyModal() {
-  pendingScenarioKey = null;
-  document.getElementById("difficulty-modal")?.classList.remove("active");
-}
-
-function confirmDifficultySelection(difficulty) {
-  const scenarioType = pendingScenarioKey;
-  selectedDifficulty = difficulty === "hard" ? "hard" : "easy";
-  closeDifficultyModal();
-  if (scenarioType) startSession(scenarioType);
+async function openDifficultyModal(scenarioType) {
+  await startSession(scenarioType);
 }
 
 async function startSession(scenarioType) {
@@ -684,6 +672,8 @@ async function startSession(scenarioType) {
   hasBreachedThreshold = false;
   isRequestInProgress = false;
   isEndingSession = false;
+  pendingScenarioKey = scenarioType;
+  pendingSessionReady = false;
   stopGameLoop();
   initAudioContext();
 
@@ -728,15 +718,39 @@ async function startSession(scenarioType) {
     document.getElementById("modal-nabiz").textContent = hr;
     document.getElementById("modal-tansiyon").textContent = bp;
 
-    renderQuickActions();
+    document.getElementById("difficulty-modal-info").textContent = note;
+    document.getElementById("difficulty-age-gender").textContent = `${age} Y/O / ${gender}`;
+    document.getElementById("difficulty-tani").textContent = diagnosis;
+    document.getElementById("difficulty-nabiz").textContent = hr;
+    document.getElementById("difficulty-tansiyon").textContent = bp;
+
     renderLabModal();
 
     logTimelineEvent("EMS Admission", `Patient admitted with ${diagnosis}`);
     renderTurn(data.turn, null, false);
-    document.getElementById("patient-modal").classList.add("active");
+    pendingSessionReady = true;
+    document.getElementById("difficulty-modal").classList.add("active");
   } catch (err) {
     alert("Initialization Error: " + err.message);
   }
+}
+
+function closeDifficultyModal() {
+  pendingScenarioKey = null;
+  pendingSessionReady = false;
+  document.getElementById("difficulty-modal")?.classList.remove("active");
+}
+
+function confirmDifficultySelection(difficulty) {
+  if (!pendingSessionReady || !currentSessionId) return;
+  selectedDifficulty = difficulty === "hard" ? "hard" : "easy";
+  document.getElementById("difficulty-modal")?.classList.remove("active");
+  renderQuickActions();
+  initAudioContext();
+  showScreen("sim");
+  startGameLoop();
+  pendingScenarioKey = null;
+  pendingSessionReady = false;
 }
 
 function closePatientModal() {
@@ -1190,6 +1204,7 @@ function returnToMenu() {
   isEndingSession = false;
   selectedDifficulty = "easy";
   pendingScenarioKey = null;
+  pendingSessionReady = false;
   stopGameLoop();
   stopECGAnimation();
   showScreen("select");

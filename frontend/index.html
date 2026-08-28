@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OmniSim AI - Interactive Clinical Decision Simulator</title>
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/style.css?v=20260828-9" />
 </head>
 <body>
   <div id="app">
@@ -280,22 +280,28 @@
     <!-- 6. Feature: Difficulty Selection Modal -->
     <div id="difficulty-modal" class="modal-overlay">
       <div class="modal-card difficulty-card">
-        <div class="modal-badge">🧭 SIMULATION MODE</div>
-        <h2>Select Case Difficulty</h2>
-        <p class="modal-text">
-          Choose how much bedside decision support should be available during this case.
-        </p>
+        <div class="modal-badge">🚨 EMS INCOMING TRAUMA/MEDICAL NOTIFICATION</div>
+        <h2>Patient Intake Briefing</h2>
+        <p id="difficulty-modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
+        <div class="modal-details-grid difficulty-details">
+          <div><strong>Age / Gender:</strong> <span id="difficulty-age-gender">--</span></div>
+          <div><strong>Working Diagnosis:</strong> <span id="difficulty-tani">--</span></div>
+          <div><strong>Baseline HR:</strong> <span id="difficulty-nabiz">--</span> bpm</div>
+          <div><strong>Baseline BP:</strong> <span id="difficulty-tansiyon">--</span></div>
+        </div>
+        <div class="difficulty-label">Choose Simulation Mode</div>
         <div class="difficulty-options">
           <button class="difficulty-option easy" onclick="confirmDifficultySelection('easy')">
+            <span class="difficulty-icon">🧭</span>
             <span>Guided</span>
-            <strong>Quick action buttons enabled</strong>
+            <strong>Quick action buttons enabled.</strong>
           </button>
           <button class="difficulty-option hard" onclick="confirmDifficultySelection('hard')">
+            <span class="difficulty-icon">🎯</span>
             <span>Expert</span>
-            <strong>Free-text orders only</strong>
+            <strong>Free-text orders only.</strong>
           </button>
         </div>
-        <button class="btn-modal secondary" onclick="closeDifficultyModal()">CANCEL</button>
       </div>
     </div>
 
@@ -349,7 +355,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260828-6"></script>
-  <script src="assets/js/app.js?v=20260828-6"></script>
+  <script src="assets/js/config.js?v=20260828-9"></script>
+  <script src="assets/js/app.js?v=20260828-9"></script>
 </body>
 </html>
