@@ -1,4 +1,5 @@
-const API_BASE = window.OMNISIM_API_BASE || "http://localhost:8000";
+const API_BASE = (window.OMNISIM_API_BASE || "http://localhost:8000").replace(/\/+$/, "");
+const apiUrl = (path) => `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 let currentSessionId = null;
 let activeScenarioKey = "acute_coronary_syndrome";
 
@@ -349,15 +350,25 @@ function toggleAudio() {
 
 // --- 2. Dynamic Scenario Loader ---
 async function loadScenarios() {
-  try {
-    const res = await fetch(`${API_BASE}/scenarios`);
-    const scenarios = await res.json();
+  const container = document.getElementById("scenario-list");
+  if (!container) return;
 
-    const container = document.getElementById("scenario-list");
-    if (!container) return;
+  try {
+    const res = await fetch(apiUrl("/scenarios"));
+    if (!res.ok) throw new Error(`Scenario API returned ${res.status}`);
+
+    const scenarios = await res.json();
+    const scenarioEntries = Object.entries(scenarios).filter(
+      ([, val]) => val && typeof val === "object" && typeof val.label === "string"
+    );
+
+    if (scenarioEntries.length === 0) {
+      throw new Error("Scenario API returned an invalid payload");
+    }
+
     container.innerHTML = "";
 
-    Object.entries(scenarios).forEach(([key, val]) => {
+    scenarioEntries.forEach(([key, val]) => {
       const card = document.createElement("div");
       card.className = `scenario-card ${val.enabled ? "featured" : "disabled"}`;
       card.innerHTML = `
@@ -373,6 +384,15 @@ async function loadScenarios() {
     });
   } catch (err) {
     console.error("Failed to load scenarios:", err);
+    container.innerHTML = `
+      <div class="scenario-card disabled">
+        <div class="card-icon">⚠️</div>
+        <span class="scenario-tag lock">BACKEND OFFLINE</span>
+        <h3>Cases could not be loaded</h3>
+        <p class="card-desc">Check the Render backend URL in config.js and confirm /scenarios is live.</p>
+        <button class="btn-primary" disabled>WAITING FOR API</button>
+      </div>
+    `;
   }
 }
 
@@ -452,7 +472,7 @@ async function startSession(scenarioType) {
   initAudioContext();
 
   try {
-    const res = await fetch(`${API_BASE}/session/start?scenario_type=${scenarioType}`, {
+    const res = await fetch(apiUrl(`/session/start?scenario_type=${scenarioType}`), {
       method: "POST",
     });
     if (!res.ok) throw new Error("Could not connect to backend server.");
@@ -709,7 +729,7 @@ async function sendActionToServer(message) {
       current_bp: currentBP,
     };
 
-    const res = await fetch(`${API_BASE}/session/${currentSessionId}/act`, {
+    const res = await fetch(apiUrl(`/session/${currentSessionId}/act`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -817,7 +837,7 @@ async function finishSession() {
   stopGameLoop();
   stopECGAnimation();
   try {
-    const res = await fetch(`${API_BASE}/session/${currentSessionId}/end`, {
+    const res = await fetch(apiUrl(`/session/${currentSessionId}/end`), {
       method: "POST",
     });
     if (!res.ok) throw new Error("Could not fetch evaluation report.");

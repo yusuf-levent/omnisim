@@ -1,1 +1,1 @@
-window.OMNISIM_API_BASE = "https://omnisim.onrender.com/";
+window.OMNISIM_API_BASE = "https://omnisim.onrender.com";
