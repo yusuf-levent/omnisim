@@ -77,7 +77,7 @@ Başka hiçbir dosyayı değiştirmen gerekmiyor.
 
 ### Backend: Render + Docker
 
-Repo kökünde `render.yaml`, backend içinde `Dockerfile` hazır.
+Repo kökünde `render.yaml`, backend içinde `Dockerfile` hazır. Render'da Docker dışında runtime seçme.
 
 1. Kodu GitHub'a push et.
 2. Render Dashboard'da **New +** → **Blueprint** seç.
@@ -87,16 +87,16 @@ Repo kökünde `render.yaml`, backend içinde `Dockerfile` hazır.
 
 Render web servislerinde uygulama `PORT` ortam değişkenine bağlanır; Dockerfile bunu otomatik kullanıyor.
 
-Docker kullanmadan Render'ın Python 3 ekranından manuel kurulum yaparsan:
+Render'da manuel Docker Web Service oluşturursan:
 
 - Name: `omnisim-backend`
 - Project: boş bırakılabilir
-- Language: `Python 3`
+- Language: `Docker`
 - Branch: `main`
-- Region: sana yakın olması için `Frankfurt` varsa onu seç; yoksa varsayılan bölge de çalışır
-- Root Directory: `backend`
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Region: `Frankfurt`
+- Root Directory: boş bırak
+- Dockerfile Path: `./backend/Dockerfile`
+- Docker Build Context Directory: boş bırak veya `.`
 - Plan: test/demo için `Free`
 - Environment Variables:
   - `GROQ_API_KEY`: Groq API anahtarın
