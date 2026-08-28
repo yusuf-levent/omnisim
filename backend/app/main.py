@@ -3,10 +3,11 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
 
-from . import models, llm_service
-from .database import engine, get_db, Base
+from . import models
+from .db.database import engine, get_db, Base
 from .scenarios import SCENARIOS, get_scenario
 from .schemas import ActionRequest, TurnResponse, ReportResponse, SessionStartResponse
+from .services import llm_service
 
 MAX_TURNS = 15
 

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: omnisim-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /scenarios
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: qwen/qwen3.8-27b

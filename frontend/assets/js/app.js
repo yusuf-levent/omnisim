@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:8000";
+const API_BASE = window.OMNISIM_API_BASE || "http://localhost:8000";
 let currentSessionId = null;
 let activeScenarioKey = "acute_coronary_syndrome";
 

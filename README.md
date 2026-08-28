@@ -9,20 +9,27 @@ MVP kapsamı: tek modül (Kalp Krizi vakası), tek vaka tipi, 6 tur, karne ekran
 omnisim/
 ├── backend/
 │   ├── app/
+│   │   ├── core/
+│   │   │   └── config.py    # Ortam değişkenleri ve uygulama ayarları
+│   │   ├── db/
+│   │   │   └── database.py  # SQLite bağlantısı
+│   │   ├── services/
+│   │   │   └── llm_service.py # LLM ile konuşan tek katman
 │   │   ├── main.py          # FastAPI endpoint'leri
-│   │   ├── database.py      # SQLite bağlantısı
 │   │   ├── models.py        # 4 tablo: SimSession, VitalState, InteractionLog, ReportResult
 │   │   ├── schemas.py       # Pydantic şemaları
-│   │   ├── llm_service.py   # LLM ile konuşan tek katman
 │   │   └── scenarios/       # MODÜLERLİK BURADA - yeni vaka eklemek için buraya dosya at
 │   │       ├── __init__.py  # vaka tipi registry
-│   │       └── kalp_krizi.py
+│   │       └── acute_coronary_syndrome.py
 │   ├── requirements.txt
 │   └── .env.example
 └── frontend/
     ├── index.html
-    ├── style.css
-    └── app.js                # vanilla JS, framework yok
+    └── assets/
+        ├── css/
+        │   └── style.css
+        └── js/
+            └── app.js        # vanilla JS, framework yok
 ```
 
 ## Kurulum (Backend)
@@ -54,24 +61,47 @@ python -m http.server 5500
 
 Sonra `http://localhost:5500` adresini aç.
 
-**Not:** `app.js` içindeki `API_BASE` değişkeni backend'in adresini gösteriyor,
+**Not:** `frontend/assets/js/app.js` içindeki `API_BASE` değişkeni backend'in adresini gösteriyor,
 lokal geliştirmede `http://localhost:8000` olarak kalabilir. Deploy ettiğinde
 gerçek backend URL'iyle değiştir.
 
 ## Yeni Vaka Tipi Ekleme (Modülerlik)
 
 1. `backend/app/scenarios/` klasörüne yeni bir `.py` dosyası ekle (örn. `goz_muayenesi.py`)
-2. İçine `kalp_krizi.py`'deki formatta bir `SCENARIO_PROMPT` yaz
+2. İçine mevcut vaka dosyalarındaki formatta bir `SCENARIO_PROMPT` yaz
 3. `scenarios/__init__.py` içindeki `SCENARIOS` dict'ine yeni satırı ekle, `enabled: True` yap
 
 Başka hiçbir dosyayı değiştirmen gerekmiyor.
 
 ## Deploy
 
-- **Backend:** Railway veya Render'a Docker/otomatik Python deploy ile.
-  `DATABASE_URL`'i istersen Postgres'e çevirebilirsin (SQLAlchemy kodu değişmez).
-- **Frontend:** Cloudflare Pages'e statik dosya olarak (`frontend/` klasörünü at).
-  Deploy sonrası `app.js`'teki `API_BASE`'i güncellemeyi unutma.
+### Backend: Render + Docker
+
+Repo kökünde `render.yaml`, backend içinde `Dockerfile` hazır.
+
+1. Kodu GitHub'a push et.
+2. Render Dashboard'da **New +** → **Blueprint** seç.
+3. Bu repo'yu bağla; Render kökteki `render.yaml` dosyasını okuyacak.
+4. `GROQ_API_KEY` ortam değişkenini Render'da gir.
+5. Deploy tamamlanınca backend URL'ini not al, örn. `https://omnisim-backend.onrender.com`.
+
+Render web servislerinde uygulama `PORT` ortam değişkenine bağlanır; Dockerfile bunu otomatik kullanıyor.
+
+### Frontend: Cloudflare Pages
+
+Frontend statik çalışıyor; build sistemi yok.
+
+1. Cloudflare Pages'te **Create a project** → Git repo'yu seç.
+2. Framework preset: **None**.
+3. Build command: boş bırak veya `exit 0`.
+4. Build output directory: `frontend`.
+5. Deploy öncesi `frontend/assets/js/config.js` içindeki backend adresini Render URL'iyle değiştir:
+
+```js
+window.OMNISIM_API_BASE = "https://omnisim-backend.onrender.com";
+```
+
+Deploy sonrası Cloudflare Pages URL'i üzerinden frontend açılır ve API isteklerini Render backend'e gönderir.
 
 ## Mimari Notlar
 

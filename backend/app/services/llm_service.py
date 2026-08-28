@@ -2,7 +2,7 @@ import json
 import time
 import logging
 from openai import OpenAI
-from config import settings
+from app.core.config import settings
 
 logger = logging.getLogger("llm_timing")
 
