@@ -10,6 +10,16 @@ from .opioid_overdose import SCENARIO_PROMPT as OPIOID_PROMPT
 from .diabetic_ketoacidosis import SCENARIO_PROMPT as DKA_PROMPT
 from .acute_ischemic_stroke import SCENARIO_PROMPT as STROKE_PROMPT
 from .septic_shock import SCENARIO_PROMPT as SEPSIS_PROMPT
+from .hyperkalemia_crisis import SCENARIO_PROMPT as HYPERKALEMIA_PROMPT
+from .adrenal_crisis import SCENARIO_PROMPT as ADRENAL_PROMPT
+from .meningococcal_sepsis import SCENARIO_PROMPT as MENINGOCOCCAL_PROMPT
+from .eclampsia import SCENARIO_PROMPT as ECLAMPSIA_PROMPT
+from .upper_gi_bleed import SCENARIO_PROMPT as GI_BLEED_PROMPT
+from .carbon_monoxide_poisoning import SCENARIO_PROMPT as CO_PROMPT
+from .pediatric_svt import SCENARIO_PROMPT as PEDIATRIC_SVT_PROMPT
+from .exertional_heat_stroke import SCENARIO_PROMPT as HEAT_STROKE_PROMPT
+from .thyroid_storm import SCENARIO_PROMPT as THYROID_STORM_PROMPT
+from .massive_pulmonary_embolism import SCENARIO_PROMPT as PE_PROMPT
 
 SCENARIOS: Dict[str, Dict[str, Any]] = {
     "acute_coronary_syndrome": {
@@ -91,6 +101,86 @@ SCENARIOS: Dict[str, Dict[str, Any]] = {
         "tag": "Infectious Disease",
         "enabled": True,
         "prompt": SEPSIS_PROMPT,
+    },
+    "hyperkalemia_crisis": {
+        "label": "11. Severe Hyperkalemia",
+        "icon": "⚡",
+        "desc": "Renal failure, bradycardia, widened QRS, and immediate membrane stabilization.",
+        "tag": "Nephrology Emergency",
+        "enabled": True,
+        "prompt": HYPERKALEMIA_PROMPT,
+    },
+    "adrenal_crisis": {
+        "label": "12. Adrenal Crisis",
+        "icon": "🧬",
+        "desc": "Refractory hypotension, hypoglycemia, electrolyte collapse, and urgent steroid rescue.",
+        "tag": "Endocrine Shock",
+        "enabled": True,
+        "prompt": ADRENAL_PROMPT,
+    },
+    "meningococcal_sepsis": {
+        "label": "13. Meningococcal Sepsis",
+        "icon": "🧫",
+        "desc": "Fever, neck stiffness, purpuric rash, shock, and immediate antibiotic resuscitation.",
+        "tag": "Critical Infection",
+        "enabled": True,
+        "prompt": MENINGOCOCCAL_PROMPT,
+    },
+    "eclampsia": {
+        "label": "14. Eclampsia",
+        "icon": "🤰",
+        "desc": "Pregnancy-associated seizure, severe hypertension, magnesium therapy, and OB activation.",
+        "tag": "Obstetric Emergency",
+        "enabled": True,
+        "prompt": ECLAMPSIA_PROMPT,
+    },
+    "upper_gi_bleed": {
+        "label": "15. Massive Upper GI Bleed",
+        "icon": "🩸",
+        "desc": "Hematemesis, melena, hemorrhagic shock, transfusion, and urgent endoscopy bundle.",
+        "tag": "Gastroenterology",
+        "enabled": True,
+        "prompt": GI_BLEED_PROMPT,
+    },
+    "carbon_monoxide_poisoning": {
+        "label": "16. Carbon Monoxide Poisoning",
+        "icon": "🏭",
+        "desc": "Headache, confusion, falsely normal pulse oximetry, and high-flow oxygen treatment.",
+        "tag": "Toxicology",
+        "enabled": True,
+        "prompt": CO_PROMPT,
+    },
+    "pediatric_svt": {
+        "label": "17. Pediatric SVT",
+        "icon": "👶",
+        "desc": "Narrow-complex tachycardia, pediatric instability assessment, adenosine, and cardioversion.",
+        "tag": "Pediatric Emergency",
+        "enabled": True,
+        "prompt": PEDIATRIC_SVT_PROMPT,
+    },
+    "exertional_heat_stroke": {
+        "label": "18. Exertional Heat Stroke",
+        "icon": "🌡️",
+        "desc": "Hyperthermia, encephalopathy, rhabdomyolysis risk, and immediate active cooling.",
+        "tag": "Environmental Emergency",
+        "enabled": True,
+        "prompt": HEAT_STROKE_PROMPT,
+    },
+    "thyroid_storm": {
+        "label": "19. Thyroid Storm",
+        "icon": "🔥",
+        "desc": "Extreme tachycardia, fever, delirium, and staged antithyroid emergency therapy.",
+        "tag": "Endocrine Emergency",
+        "enabled": True,
+        "prompt": THYROID_STORM_PROMPT,
+    },
+    "massive_pulmonary_embolism": {
+        "label": "20. Massive Pulmonary Embolism",
+        "icon": "🫁",
+        "desc": "Sudden hypoxia, obstructive shock, RV strain, anticoagulation, and reperfusion decisions.",
+        "tag": "Vascular Emergency",
+        "enabled": True,
+        "prompt": PE_PROMPT,
     },
 }
 
