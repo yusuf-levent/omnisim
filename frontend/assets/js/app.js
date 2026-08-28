@@ -736,8 +736,13 @@ async function startSession(scenarioType) {
 }
 
 function closeDifficultyModal() {
+  currentSessionId = null;
   pendingScenarioKey = null;
   pendingSessionReady = false;
+  hasBreachedThreshold = false;
+  isRequestInProgress = false;
+  isEndingSession = false;
+  stopGameLoop();
   document.getElementById("difficulty-modal")?.classList.remove("active");
 }
 

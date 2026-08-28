@@ -984,6 +984,7 @@ body {
 }
 
 .modal-card {
+  position: relative;
   background: #0f172a;
   border: 1px solid rgba(59, 130, 246, 0.4);
   border-radius: 18px;
@@ -992,6 +993,28 @@ body {
   width: 90%;
   text-align: center;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+}
+
+.modal-close-x {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #cbd5e1;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.modal-close-x:hover {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fff;
 }
 
 .modal-card.wide {
