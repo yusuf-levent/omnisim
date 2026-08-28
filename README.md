@@ -87,6 +87,33 @@ Repo kökünde `render.yaml`, backend içinde `Dockerfile` hazır.
 
 Render web servislerinde uygulama `PORT` ortam değişkenine bağlanır; Dockerfile bunu otomatik kullanıyor.
 
+Docker kullanmadan Render'ın Python 3 ekranından manuel kurulum yaparsan:
+
+- Name: `omnisim-backend`
+- Project: boş bırakılabilir
+- Language: `Python 3`
+- Branch: `main`
+- Region: sana yakın olması için `Frankfurt` varsa onu seç; yoksa varsayılan bölge de çalışır
+- Root Directory: `backend`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Plan: test/demo için `Free`
+- Environment Variables:
+  - `GROQ_API_KEY`: Groq API anahtarın
+  - `LLM_MODEL`: `qwen/qwen3.8-27b`
+  - `DATABASE_URL`: boş bırakırsan SQLite kullanır; kalıcı veri için Postgres bağlantı adresi ver
+
+### Alembic
+
+Veritabanı migration sistemi hazır. Yeni model değişikliğinden sonra backend klasöründe:
+
+```bash
+python -m alembic revision --autogenerate -m "change description"
+python -m alembic upgrade head
+```
+
+Docker/Render başlangıcında `python -m alembic upgrade head` otomatik çalışır.
+
 ### Frontend: Cloudflare Pages
 
 Frontend statik çalışıyor; build sistemi yok.

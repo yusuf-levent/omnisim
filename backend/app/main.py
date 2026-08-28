@@ -4,14 +4,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
 
 from . import models
-from .db.database import engine, get_db, Base
+from .db.database import get_db
 from .scenarios import SCENARIOS, get_scenario
 from .schemas import ActionRequest, TurnResponse, ReportResponse, SessionStartResponse
 from .services import llm_service
 
 MAX_TURNS = 15
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="OmniSim AI - Clinical Case Simulator")
 

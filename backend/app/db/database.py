@@ -1,17 +1,12 @@
-"""
-SQLite veritabanı bağlantısı.
-Dosya tabanlı, hiçbir ayrı DB servisi kurulmasına gerek yok.
-İleride Postgres'e geçmek istersen sadece DATABASE_URL'i değiştirmen yeterli
-(SQLAlchemy ORM kodu aynı kalır).
-"""
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-DATABASE_URL = "sqlite:///./omnisim.db"
+from app.core.config import get_database_url
 
-engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
-)
+DATABASE_URL = get_database_url()
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
