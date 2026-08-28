@@ -1,5 +1,6 @@
 const API_BASE = (window.OMNISIM_API_BASE || "http://localhost:8000").replace(/\/+$/, "");
 const apiUrl = (path) => `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+const API_TIMEOUT_MS = 45000;
 let currentSessionId = null;
 let activeScenarioKey = "acute_coronary_syndrome";
 
@@ -678,7 +679,7 @@ async function startSession(scenarioType) {
   initAudioContext();
 
   try {
-    const res = await fetch(apiUrl(`/session/start?scenario_type=${scenarioType}`), {
+    const res = await fetchWithTimeout(apiUrl(`/session/start?scenario_type=${scenarioType}`), {
       method: "POST",
     });
     if (!res.ok) throw new Error("Could not connect to backend server.");
@@ -821,6 +822,20 @@ function setInteractionsDisabled(disabled) {
 
   const chipBtns = document.querySelectorAll(".chip-btn");
   chipBtns.forEach((btn) => (btn.disabled = disabled));
+
+  const quickActionBar = document.getElementById("quick-action-container");
+  if (quickActionBar) quickActionBar.classList.toggle("is-disabled", disabled);
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // --- 6. Turn Rendering & DDx Updates ---
@@ -967,13 +982,20 @@ async function sendActionToServer(message) {
       current_bp: currentBP,
     };
 
-    const res = await fetch(apiUrl(`/session/${currentSessionId}/act`), {
+    const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/act`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error("Backend connection failed");
+    if (!res.ok) {
+      let detail = "Backend connection failed";
+      try {
+        const errorPayload = await res.json();
+        detail = errorPayload.detail || detail;
+      } catch (_) {}
+      throw new Error(detail);
+    }
 
     const turn = await res.json();
     
@@ -986,7 +1008,11 @@ async function sendActionToServer(message) {
     console.error("Action error:", err);
     const loadingEl = document.getElementById(loadingId);
     if (loadingEl) loadingEl.remove();
-    
+    const errorMessage =
+      err.name === "AbortError"
+        ? "Action timed out after 45 seconds. The order was not evaluated; try again after checking backend logs."
+        : `Action could not be processed: ${err.message}`;
+    appendLogEntry("sistem", errorMessage);
     startGameLoop();
   } finally {
     // 5. Kritik: İstek bittiği an bayrağı ve buton kilitlerini temizle ki 2., 3. ve sonraki basışlarda asla kilitlenme olmasın
@@ -1093,7 +1119,7 @@ async function finishSession() {
   stopGameLoop();
   stopECGAnimation();
   try {
-    const res = await fetch(apiUrl(`/session/${currentSessionId}/end`), {
+    const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/end`), {
       method: "POST",
     });
     if (!res.ok) throw new Error("Could not fetch evaluation report.");

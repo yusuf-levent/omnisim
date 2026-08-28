@@ -13,6 +13,10 @@ client = OpenAI(
 MODEL = settings.LLM_MODEL
 
 
+class LLMServiceError(RuntimeError):
+    pass
+
+
 def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 280) -> dict:
     enforce_system = (
         system_prompt
@@ -28,13 +32,17 @@ def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 28
     prompt_chars = sum(len(m["content"]) for m in messages)
     t0 = time.monotonic()
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        response_format={"type": "json_object"},
-        temperature=0.2,
-        max_tokens=max_tokens,  # çıktı uzunluğunu sınırla -> en kötü durumda süreyi de sınırlar
-    )
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=max_tokens,
+        )
+    except Exception as exc:
+        logger.exception("LLM provider call failed")
+        raise LLMServiceError(str(exc)) from exc
 
     elapsed = time.monotonic() - t0
     usage = response.usage
@@ -47,7 +55,11 @@ def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 28
         getattr(usage, "completion_tokens", "?"),
     )
 
-    return json.loads(response.choices[0].message.content)
+    try:
+        return json.loads(response.choices[0].message.content)
+    except (json.JSONDecodeError, TypeError, AttributeError) as exc:
+        logger.exception("LLM returned invalid JSON")
+        raise LLMServiceError("LLM returned invalid JSON") from exc
 
 
 def start_scenario(scenario_prompt: str) -> dict:

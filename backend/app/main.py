@@ -48,6 +48,64 @@ def _history_from_logs(session: models.SimSession) -> list[dict]:
     return history[-6:]
 
 
+def _fallback_turn(action: ActionRequest) -> dict:
+    current_hr = action.current_hr or 110
+    current_spo2 = action.current_spo2 or 92
+    current_bp = action.current_bp or "140/90"
+    lower_msg = action.message.lower()
+
+    is_supportive = any(
+        term in lower_msg
+        for term in (
+            "oxygen",
+            "o2",
+            "fluid",
+            "saline",
+            "aspirin",
+            "epinephrine",
+            "naloxone",
+            "magnesium",
+            "calcium",
+            "insulin",
+            "dextrose",
+            "antibiotic",
+            "ceftriaxone",
+            "norepinephrine",
+            "adenosine",
+            "cardioversion",
+            "thrombolysis",
+            "cooling",
+        )
+    )
+
+    if is_supportive:
+        hr_val = max(55, current_hr - 8)
+        spo2_val = min(99, current_spo2 + 2)
+        drift = -0.2
+        note = "Order received; bedside team executes the intervention while remote evaluator response is delayed."
+    else:
+        hr_val = min(180, current_hr + 4)
+        spo2_val = max(80, current_spo2 - 1)
+        drift = 0.2
+        note = "Order documented; patient remains unstable while remote evaluator response is delayed."
+
+    return {
+        "age": 54,
+        "gender": "Male",
+        "primary_diagnosis": "Active Emergency Case",
+        "patient_dialogue": "",
+        "system_note": note,
+        "heart_rate": hr_val,
+        "blood_pressure": current_bp,
+        "spo2": spo2_val,
+        "consciousness": "Alert",
+        "heart_rate_drift": drift,
+        "min_heart_rate": 35,
+        "max_heart_rate": 185,
+        "case_completed": False,
+    }
+
+
 @app.get("/scenarios")
 def list_scenarios():
     return {
@@ -134,7 +192,10 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
         vital_context = f"[CURRENT VITALS: HR={action.current_hr} bpm, SpO2={action.current_spo2}%, BP={action.current_bp}] "
 
     full_user_message = f"{vital_context}{action.message}"
-    result = llm_service.process_turn(scenario["prompt"], history, full_user_message)
+    try:
+        result = llm_service.process_turn(scenario["prompt"], history, full_user_message)
+    except llm_service.LLMServiceError:
+        result = _fallback_turn(action)
 
     new_turn_no = session.turn_count + 1
     force_end = new_turn_no >= MAX_TURNS
