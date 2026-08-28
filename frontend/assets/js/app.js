@@ -17,6 +17,8 @@ let gameLoopInterval = null;
 let isRequestInProgress = false;
 let hasBreachedThreshold = false;
 let isEndingSession = false;
+let selectedDifficulty = "easy";
+let pendingScenarioKey = null;
 
 // Event Timeline Tracking
 let sessionActionLogs = [];
@@ -566,7 +568,7 @@ async function loadScenarios() {
         <span class="scenario-tag ${val.enabled ? "live" : "lock"}">${val.tag}</span>
         <h3>${val.label}</h3>
         <p class="card-desc">${val.desc}</p>
-        <button class="btn-primary" ${val.enabled ? "" : "disabled"} onclick="startSession('${key}')">
+        <button class="btn-primary" ${val.enabled ? "" : "disabled"} onclick="openDifficultyModal('${key}')">
           ${val.enabled ? "INITIALIZE CASE" : "COMING SOON"}
         </button>
       `;
@@ -617,6 +619,13 @@ function renderQuickActions(actions) {
     return;
   }
 
+  if (selectedDifficulty === "hard") {
+    container.innerHTML = "";
+    container.classList.add("hidden");
+    return;
+  }
+
+  container.classList.remove("hidden");
   container.innerHTML = "";
 
   const listToRender = actions || QUICK_ACTIONS[activeScenarioKey] || QUICK_ACTIONS.default || [];
@@ -653,6 +662,23 @@ function renderLabModal() {
 }
 
 // --- 4. Start Session & Modal Handling ---
+function openDifficultyModal(scenarioType) {
+  pendingScenarioKey = scenarioType;
+  document.getElementById("difficulty-modal")?.classList.add("active");
+}
+
+function closeDifficultyModal() {
+  pendingScenarioKey = null;
+  document.getElementById("difficulty-modal")?.classList.remove("active");
+}
+
+function confirmDifficultySelection(difficulty) {
+  const scenarioType = pendingScenarioKey;
+  selectedDifficulty = difficulty === "hard" ? "hard" : "easy";
+  closeDifficultyModal();
+  if (scenarioType) startSession(scenarioType);
+}
+
 async function startSession(scenarioType) {
   activeScenarioKey = scenarioType || "acute_coronary_syndrome";
   hasBreachedThreshold = false;
@@ -1162,6 +1188,8 @@ function returnToMenu() {
   hasBreachedThreshold = false;
   isRequestInProgress = false;
   isEndingSession = false;
+  selectedDifficulty = "easy";
+  pendingScenarioKey = null;
   stopGameLoop();
   stopECGAnimation();
   showScreen("select");

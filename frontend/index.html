@@ -277,7 +277,29 @@
       </div>
     </div>
 
-    <!-- 6. Feature: Manual Case Conclusion Confirmation Modal -->
+    <!-- 6. Feature: Difficulty Selection Modal -->
+    <div id="difficulty-modal" class="modal-overlay">
+      <div class="modal-card difficulty-card">
+        <div class="modal-badge">🧭 SIMULATION MODE</div>
+        <h2>Select Case Difficulty</h2>
+        <p class="modal-text">
+          Choose how much bedside decision support should be available during this case.
+        </p>
+        <div class="difficulty-options">
+          <button class="difficulty-option easy" onclick="confirmDifficultySelection('easy')">
+            <span>Guided</span>
+            <strong>Quick action buttons enabled</strong>
+          </button>
+          <button class="difficulty-option hard" onclick="confirmDifficultySelection('hard')">
+            <span>Expert</span>
+            <strong>Free-text orders only</strong>
+          </button>
+        </div>
+        <button class="btn-modal secondary" onclick="closeDifficultyModal()">CANCEL</button>
+      </div>
+    </div>
+
+    <!-- 7. Feature: Manual Case Conclusion Confirmation Modal -->
     <div id="abort-confirm-modal" class="modal-overlay">
       <div class="modal-card confirm-card">
         <div class="modal-badge">⚠️ CASE TERMINATION REQUEST</div>
@@ -308,7 +330,7 @@
       </div>
     </div>
 
-    <!-- 7. Feature: Clinical Outcome Pop-up Modal -->
+    <!-- 8. Feature: Clinical Outcome Pop-up Modal -->
     <div id="outcome-modal" class="modal-overlay">
       <div class="modal-card">
         <div id="outcome-badge" class="modal-badge">🚨 CLINICAL OUTCOME NOTICE</div>
@@ -327,7 +349,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260828-5"></script>
-  <script src="assets/js/app.js?v=20260828-5"></script>
+  <script src="assets/js/config.js?v=20260828-6"></script>
+  <script src="assets/js/app.js?v=20260828-6"></script>
 </body>
 </html>
