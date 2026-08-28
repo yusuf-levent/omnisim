@@ -4,19 +4,22 @@ from typing import Optional, Dict
 
 class ActionRequest(BaseModel):
     message: str
+    current_hr: Optional[int] = None
+    current_spo2: Optional[int] = None
+    current_bp: Optional[str] = None
 
 
 class TurnResponse(BaseModel):
     session_id: str
     turn_no: int
-    age: int = 58
+    age: int = 54
     gender: str = "Male"
     primary_diagnosis: str = "Acute Coronary Syndrome"
     patient_dialogue: str
     system_note: str
     heart_rate: int
     blood_pressure: str
-    spo2: int = 94
+    spo2: int = 92
     consciousness: str = "Alert"
     heart_rate_drift: float = -0.5
     min_heart_rate: int = 50

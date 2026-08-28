@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
@@ -21,13 +22,32 @@ app.add_middleware(
 )
 
 
-def _history_from_logs(logs: list[models.InteractionLog]) -> list[dict]:
+def _history_from_logs(session: models.SimSession) -> list[dict]:
     history = []
-    for log in logs:
+    
+    # Vitalleri tur numarasına göre haritala
+    vitals_map = {}
+    if hasattr(session, "vitals") and session.vitals:
+        vitals_map = {v.turn_no: v for v in session.vitals}
+    
+    # session.logs üzerinde güvenli döngü
+    for log in (session.logs or []):
         if log.user_message:
             history.append({"role": "user", "content": log.user_message})
-        assistant_content = f'{{"patient_dialogue": "{log.patient_dialogue}", "system_note": "{log.system_note}"}}'
-        history.append({"role": "assistant", "content": assistant_content})
+        
+        vital = vitals_map.get(log.turn_no)
+        assistant_payload = {
+            "patient_dialogue": log.patient_dialogue or "",
+            "system_note": log.system_note or "",
+            "heart_rate": getattr(vital, "heart_rate", 110) if vital else 110,
+            "blood_pressure": getattr(vital, "blood_pressure", "150/95") if vital else "150/95",
+            "spo2": getattr(vital, "spo2", 92) if vital else 92,
+            "consciousness": getattr(vital, "consciousness", "Alert") if vital else "Alert",
+        }
+        history.append({
+            "role": "assistant", 
+            "content": json.dumps(assistant_payload, ensure_ascii=False)
+        })
     return history
 
 
@@ -58,11 +78,17 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
     db.add(session)
     db.flush()
 
+    hr_val = int(result.get("heart_rate", 105))
+    bp_val = str(result.get("blood_pressure", "150/95"))
+    spo2_val = int(result.get("spo2", 93))
+    cons_val = str(result.get("consciousness", "Alert"))
+
     vital = models.VitalState(
         session_id=session.id,
-        heart_rate=int(result.get("heart_rate", 105)),
-        blood_pressure=str(result.get("blood_pressure", "150/95")),
-        consciousness=str(result.get("consciousness", "Alert")),
+        heart_rate=hr_val,
+        blood_pressure=bp_val,
+        spo2=spo2_val,
+        consciousness=cons_val,
         turn_no=1,
     )
     log = models.InteractionLog(
@@ -83,10 +109,10 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
         primary_diagnosis=str(result.get("primary_diagnosis", "Acute Coronary Syndrome")),
         patient_dialogue=result.get("patient_dialogue", ""),
         system_note=result.get("system_note", ""),
-        heart_rate=int(result.get("heart_rate", 105)),
-        blood_pressure=str(result.get("blood_pressure", "150/95")),
-        spo2=int(result.get("spo2", 93)),
-        consciousness=str(result.get("consciousness", "Alert")),
+        heart_rate=hr_val,
+        blood_pressure=bp_val,
+        spo2=spo2_val,
+        consciousness=cons_val,
         heart_rate_drift=float(result.get("heart_rate_drift", -0.5)),
         min_heart_rate=int(result.get("min_heart_rate", 60)),
         max_heart_rate=int(result.get("max_heart_rate", 140)),
@@ -97,6 +123,8 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
 
 @app.post("/session/{session_id}/act", response_model=TurnResponse)
 def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db)):
+    print(f"\n🔔 [BACKEND ACT ÇAĞRILDI] Session: {session_id[:8]}... | Gelen HR: {action.current_hr} | Mesaj: {action.message[:40]}")
+    
     session = db.query(models.SimSession).filter_by(id=session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -104,19 +132,46 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
         raise HTTPException(status_code=400, detail="This simulation has already concluded")
 
     scenario = get_scenario(session.scenario_type)
-    history = _history_from_logs(session.logs)
+    history = _history_from_logs(session)
 
-    result = llm_service.process_turn(scenario["prompt"], history, action.message)
+    # Anlık frontend vital durumunu LLM promptuna meta-bilgi olarak bağla
+    vital_context = ""
+    if action.current_hr is not None:
+        vital_context = f"[CURRENT VITALS: HR={action.current_hr} bpm, SpO2={action.current_spo2}%, BP={action.current_bp}] "
+    
+    full_user_message = f"{vital_context}{action.message}"
+
+    result = llm_service.process_turn(scenario["prompt"], history, full_user_message)
 
     new_turn_no = session.turn_count + 1
     force_end = new_turn_no >= MAX_TURNS
-    case_completed = bool(result.get("case_completed", False)) or force_end
+    is_critical_breach = "[CRITICAL THRESHOLD" in action.message
+    case_completed = bool(result.get("case_completed", False)) or force_end or is_critical_breach
+
+    # 1. LLM Ham Çıktısı
+    raw_hr = int(result.get("heart_rate", action.current_hr or 110))
+    
+    # 2. Fizyolojik Süreklilik ve Sıçrama Önleyici Filtre
+    if action.current_hr is not None:
+        if "[TIMEOUT" in action.message or "[CRITICAL" in action.message:
+            # Müdahale yokken veya timeout durumunda nabız ASLA geriye düşemez, en az +2 artar
+            hr_val = max(action.current_hr + 2, raw_hr)
+        else:
+            # İlaç/müdahale yapıldığında tek turda en fazla ±12 bpm değişebilir (yumuşak toparlanma)
+            hr_val = max(action.current_hr - 12, min(action.current_hr + 12, raw_hr))
+    else:
+        hr_val = raw_hr
+
+    bp_val = str(result.get("blood_pressure", action.current_bp or "140/90"))
+    spo2_val = int(result.get("spo2", action.current_spo2 or 92))
+    cons_val = str(result.get("consciousness", "Alert"))
 
     vital = models.VitalState(
         session_id=session.id,
-        heart_rate=int(result.get("heart_rate", 105)),
-        blood_pressure=str(result.get("blood_pressure", "140/90")),
-        consciousness=str(result.get("consciousness", "Alert")),
+        heart_rate=hr_val,
+        blood_pressure=bp_val,
+        spo2=spo2_val,
+        consciousness=cons_val,
         turn_no=new_turn_no,
     )
     log = models.InteractionLog(
@@ -136,22 +191,20 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
     return TurnResponse(
         session_id=session.id,
         turn_no=new_turn_no,
-        age=int(result.get("age", 58)),
+        age=int(result.get("age", 54)),
         gender=str(result.get("gender", "Male")),
         primary_diagnosis=str(result.get("primary_diagnosis", "Acute Coronary Syndrome")),
         patient_dialogue=result.get("patient_dialogue", ""),
         system_note=result.get("system_note", ""),
-        heart_rate=int(result.get("heart_rate", 105)),
-        blood_pressure=str(result.get("blood_pressure", "140/90")),
-        spo2=int(result.get("spo2", 94)),
-        consciousness=str(result.get("consciousness", "Alert")),
+        heart_rate=hr_val,
+        blood_pressure=bp_val,
+        spo2=spo2_val,
+        consciousness=cons_val,
         heart_rate_drift=float(result.get("heart_rate_drift", -0.5)),
         min_heart_rate=int(result.get("min_heart_rate", 60)),
         max_heart_rate=int(result.get("max_heart_rate", 140)),
         case_completed=case_completed,
     )
-
-
 @app.post("/session/{session_id}/end", response_model=ReportResponse)
 def end_session(session_id: str, db: DBSession = Depends(get_db)):
     session = db.query(models.SimSession).filter_by(id=session_id).first()
@@ -159,7 +212,7 @@ def end_session(session_id: str, db: DBSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Session not found")
 
     scenario = get_scenario(session.scenario_type)
-    history = _history_from_logs(session.logs)
+    history = _history_from_logs(session)
     result = llm_service.generate_report(scenario["prompt"], history)
 
     report = models.ReportResult(

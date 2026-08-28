@@ -1,11 +1,13 @@
 const API_BASE = "http://localhost:8000";
 let currentSessionId = null;
-let activeScenarioKey = "default";
+let activeScenarioKey = "acute_coronary_syndrome";
 
 // Simulation State Engine
 let currentHeartRate = 105;
 let currentSpO2 = 94;
-let heartRateDrift = -0.5;
+let currentBP = "150/95";
+let currentConsciousness = "Alert";
+let heartRateDrift = 0.4;
 let minHeartRate = 50;
 let maxHeartRate = 140;
 let timeLeft = 30;
@@ -24,29 +26,34 @@ let isAudioEnabled = true;
 // Dynamic Differential Diagnosis (DDx) Profiles
 const DDX_PROFILES = {
   acute_coronary_syndrome: [
-    { name: "Acute STEMI / ACS", baseProb: 88, color: "red" },
+    { name: "Acute Anterior STEMI / ACS", baseProb: 88, color: "red" },
     { name: "Aortic Dissection", baseProb: 8, color: "yellow" },
     { name: "Pulmonary Embolism", baseProb: 4, color: "blue" },
   ],
-  septic_shock: [
-    { name: "Septic Shock / Urosepsis", baseProb: 86, color: "red" },
-    { name: "Cardiogenic Shock", baseProb: 9, color: "yellow" },
-    { name: "Hypovolemic Shock", baseProb: 5, color: "blue" },
+  acute_ischemic_stroke: [
+    { name: "Acute Left MCA Ischemic Stroke", baseProb: 85, color: "red" },
+    { name: "Hemorrhagic Stroke", baseProb: 10, color: "yellow" },
+    { name: "Hypoglycemia / Todd's Paralysis", baseProb: 5, color: "blue" },
   ],
-  anaphylaxis: [
-    { name: "Severe Anaphylactic Shock", baseProb: 90, color: "red" },
-    { name: "Severe Acute Asthma", baseProb: 7, color: "yellow" },
-    { name: "Laryngeal Angioedema", baseProb: 3, color: "blue" },
+  acute_pulmonary_edema: [
+    { name: "Acute Cardiogenic Pulmonary Edema", baseProb: 86, color: "red" },
+    { name: "Severe Pneumonia / ARDS", baseProb: 9, color: "yellow" },
+    { name: "Acute COPD Exacerbation", baseProb: 5, color: "blue" },
   ],
-  status_asthmaticus: [
-    { name: "Status Asthmaticus", baseProb: 87, color: "red" },
-    { name: "Tension Pneumothorax", baseProb: 8, color: "yellow" },
-    { name: "Foreign Body Aspiration", baseProb: 5, color: "blue" },
+  anaphylactic_shock: [
+    { name: "Severe Anaphylactic Shock", baseProb: 89, color: "red" },
+    { name: "Acute Laryngospasm / Foreign Body", baseProb: 7, color: "yellow" },
+    { name: "Vasovagal Syncope", baseProb: 4, color: "blue" },
   ],
-  tension_pneumothorax: [
-    { name: "Tension Pneumothorax", baseProb: 89, color: "red" },
-    { name: "Massive Hemothorax", baseProb: 8, color: "yellow" },
-    { name: "Pericardial Tamponade", baseProb: 3, color: "blue" },
+  diabetic_ketoacidosis: [
+    { name: "Diabetic Ketoacidosis (DKA)", baseProb: 87, color: "red" },
+    { name: "Hyperosmolar Hyperglycemic State", baseProb: 8, color: "yellow" },
+    { name: "Acute Pancreatitis / Sepsis", baseProb: 5, color: "blue" },
+  ],
+  hypovolemic_shock: [
+    { name: "Hemorrhagic Hypovolemic Shock", baseProb: 88, color: "red" },
+    { name: "Ruptured Ectopic / Abdominal Trauma", baseProb: 8, color: "yellow" },
+    { name: "Septic Shock", baseProb: 4, color: "blue" },
   ],
   default: [
     { name: "Primary Clinical Condition", baseProb: 85, color: "red" },
@@ -90,13 +97,12 @@ function playBedsideBeep() {
   try {
     const now = audioCtx.currentTime;
 
-    // SpO2 ve HR değerine göre ton modülasyonu (Oksijen düşünce ton kalınlaşır)
     let baseFreq = 976;
-    if (currentSpO2 < 85) baseFreq = 680;
-    else if (currentSpO2 < 90) baseFreq = 780;
-    else if (currentSpO2 < 94) baseFreq = 880;
+    if (currentSpO2 < 82) baseFreq = 540;
+    else if (currentSpO2 < 88) baseFreq = 680;
+    else if (currentSpO2 < 93) baseFreq = 820;
 
-    if (currentHeartRate > 125) baseFreq += 60;
+    if (currentHeartRate > 125) baseFreq += 40;
 
     const osc1 = audioCtx.createOscillator();
     const gain1 = audioCtx.createGain();
@@ -109,7 +115,6 @@ function playBedsideBeep() {
     osc2.type = "triangle";
     osc2.frequency.setValueAtTime(baseFreq * 2, now);
 
-    // Gür ve keskin hastane monitörü vuruşu (Attack / Decay)
     gain1.gain.setValueAtTime(0.001, now);
     gain1.gain.linearRampToValueAtTime(0.35, now + 0.004);
     gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
@@ -129,7 +134,7 @@ function playBedsideBeep() {
     osc1.stop(now + 0.08);
     osc2.stop(now + 0.08);
   } catch (e) {
-    console.error("Audio error", e);
+    console.error("Audio telemetry error", e);
   }
 }
 
@@ -170,7 +175,7 @@ async function loadScenarios() {
 
 // --- 3. Start Session & Modal Handling ---
 async function startSession(scenarioType) {
-  activeScenarioKey = scenarioType || "default";
+  activeScenarioKey = scenarioType || "acute_coronary_syndrome";
   initAudioContext();
   try {
     const res = await fetch(`${API_BASE}/session/start?scenario_type=${scenarioType}`, {
@@ -185,17 +190,19 @@ async function startSession(scenarioType) {
 
     document.getElementById("chat-log").innerHTML = "";
 
-    const age = data.turn?.age || 58;
+    const age = data.turn?.age || 54;
     const gender = data.turn?.gender || "Male";
     const diagnosis = data.turn?.primary_diagnosis || "Acute Coronary Syndrome";
-    const hr = data.turn?.heart_rate || 105;
+    const hr = data.turn?.heart_rate || 110;
     const bp = data.turn?.blood_pressure || "150/95";
-    const spo2 = data.turn?.spo2 || 93;
+    const spo2 = data.turn?.spo2 || 92;
     const note = data.turn?.system_note || "Patient admitted to the resuscitation bay.";
 
     currentHeartRate = hr;
     currentSpO2 = spo2;
+    currentBP = bp;
 
+    document.getElementById("patient-display-name").textContent = `${age} Y/O ${gender}`;
     document.getElementById("patient-age").textContent = age;
     document.getElementById("patient-gender").textContent = String(gender).toUpperCase();
     document.getElementById("patient-tani").textContent = diagnosis;
@@ -217,41 +224,55 @@ async function startSession(scenarioType) {
 
 function closePatientModal() {
   document.getElementById("patient-modal").classList.remove("active");
+  initAudioContext();
   showScreen("sim");
   startGameLoop();
 }
 
-// --- 4. Ticking Simulation Engine ---
+// --- 4. Ticking Simulation Engine (Safe & Debounced) ---
+let hasBreachedThreshold = false; // Eşik döngüsünü kilitleyen bayrak
+
+function stopGameLoop() {
+  if (gameLoopInterval !== null) {
+    clearInterval(gameLoopInterval);
+    gameLoopInterval = null;
+  }
+}
+
 function startGameLoop() {
-  clearInterval(gameLoopInterval);
+  stopGameLoop();
   timeLeft = TURN_DURATION;
   updateTimerUI();
 
+  console.log(`⏱️ [GAME LOOP BAŞLADI] Süre: ${timeLeft}s | HR: ${Math.round(currentHeartRate)} bpm`);
+
   gameLoopInterval = setInterval(() => {
+    // İstek devam ederken sayacı dondur
     if (isRequestInProgress) return;
 
     timeLeft--;
+    updateTimerUI();
 
     currentHeartRate += heartRateDrift;
     const roundedHR = Math.round(currentHeartRate);
-    document.getElementById("vital-nabiz").textContent = roundedHR;
-    updateTimerUI();
+    const hrEl = document.getElementById("vital-nabiz");
+    if (hrEl) hrEl.textContent = roundedHR;
 
-    if (roundedHR <= minHeartRate || roundedHR >= maxHeartRate) {
-      clearInterval(gameLoopInterval);
+    // 1. Kritik Güvenlik Eşiği Denetimi (Tek seferlik kilit ile tetiklenir)
+    if ((roundedHR <= minHeartRate || roundedHR >= maxHeartRate) && !hasBreachedThreshold) {
+      hasBreachedThreshold = true;
+      stopGameLoop();
       logTimelineEvent("Threshold Breach", `Heart rate critical (${roundedHR} bpm)`);
-      sendActionToServer(`[CRITICAL THRESHOLD BREACHED: Heart Rate reached ${roundedHR} bpm! Hemodynamic collapse imminent!]`);
-      return;
-    }
-
-    if (timeLeft <= 0) {
-      clearInterval(gameLoopInterval);
+      sendActionToServer(`[CRITICAL THRESHOLD BREACHED: Heart Rate reached ${roundedHR} bpm! Patient entering cardiovascular collapse!]`);
+    } 
+    // 2. 30 Saniye Timeout Denetimi
+    else if (timeLeft <= 0) {
+      stopGameLoop();
       logTimelineEvent("Timeout Error", "30s elapsed with zero interventions");
-      sendActionToServer("[TIMEOUT: No clinical action taken for 30 seconds]");
+      sendActionToServer("[TIMEOUT: No clinical action taken for 30 seconds. Patient deteriorating.]");
     }
   }, 1000);
 }
-
 function updateTimerUI() {
   const timerDisplay = document.getElementById("timer-display");
   if (timerDisplay) {
@@ -259,37 +280,66 @@ function updateTimerUI() {
   }
 }
 
+function setInteractionsDisabled(disabled) {
+  const submitBtn = document.getElementById("submit-btn");
+  if (submitBtn) submitBtn.disabled = disabled;
+  
+  const input = document.getElementById("action-input");
+  if (input) input.disabled = disabled;
+
+  const chipBtns = document.querySelectorAll(".chip-btn");
+  chipBtns.forEach(btn => btn.disabled = disabled);
+}
+
 // --- 5. Turn Rendering & DDx Updates ---
+let lastSystemNote = "";
+
 function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   const log = document.getElementById("chat-log");
 
-  if (userMessage) appendLogEntry("user", userMessage);
-  if (turn?.system_note && turn.system_note.trim() !== "") {
-    appendLogEntry("sistem", turn.system_note);
-    document.getElementById("doctor-note-text").textContent = turn.system_note;
+  // Kullanıcı mesajı varsa bas ve eşik kilidini sıfırla
+  if (userMessage) {
+    appendLogEntry("user", userMessage);
+    hasBreachedThreshold = false;
   }
+  
+  // Sistem notunu bas (Mükerrer kontrolü ile)
+  if (turn?.system_note && turn.system_note.trim() !== "" && turn.system_note !== lastSystemNote) {
+    appendLogEntry("sistem", turn.system_note);
+    const doctorNoteEl = document.getElementById("doctor-note-text");
+    if (doctorNoteEl) doctorNoteEl.textContent = turn.system_note;
+    lastSystemNote = turn.system_note;
+  }
+  
+  // Hasta diyaloğunu bas
   if (turn?.patient_dialogue && turn.patient_dialogue.trim() !== "" && turn.consciousness !== "Unresponsive") {
     appendLogEntry("hasta", turn.patient_dialogue);
   }
 
-  currentHeartRate = turn?.heart_rate || 105;
-  currentSpO2 = turn?.spo2 || 94;
-  heartRateDrift = turn?.heart_rate_drift !== undefined ? turn.heart_rate_drift : -0.5;
+  // Vitalleri güncelle
+  currentHeartRate = turn?.heart_rate || currentHeartRate;
+  currentSpO2 = turn?.spo2 || currentSpO2;
+  currentBP = turn?.blood_pressure || currentBP;
+  currentConsciousness = turn?.consciousness || "Alert";
+  heartRateDrift = turn?.heart_rate_drift !== undefined ? turn.heart_rate_drift : 0.4;
   minHeartRate = turn?.min_heart_rate || 50;
   maxHeartRate = turn?.max_heart_rate || 140;
 
+  // Telemetri kartlarını güncelle
   document.getElementById("vital-nabiz").textContent = Math.round(currentHeartRate);
-  document.getElementById("vital-tansiyon").textContent = turn?.blood_pressure || "145/90";
+  document.getElementById("vital-tansiyon").textContent = currentBP;
   document.getElementById("vital-spo2").textContent = currentSpO2;
-  document.getElementById("vital-bilinc").textContent = String(turn?.consciousness || "Alert").toUpperCase();
+  document.getElementById("vital-bilinc").textContent = String(currentConsciousness).toUpperCase();
   document.getElementById("turn-count").textContent = turn?.turn_no || 1;
 
+  // DDx tablosunu yenile ve logu en alta kaydır
   updateDDxBoard(turn);
   log.scrollTop = log.scrollHeight;
 
-  if (turn?.case_completed) {
-    clearInterval(gameLoopInterval);
-    setTimeout(() => finishSession(), 1200);
+  // Vaka sonlanma denetimi
+  if (turn?.case_completed || turn?.consciousness === "Unresponsive") {
+    stopGameLoop();
+    setTimeout(() => finishSession(), 1500);
   } else if (shouldStartTimer) {
     startGameLoop();
   }
@@ -308,9 +358,9 @@ function updateDDxBoard(turn) {
   if (!container) return;
 
   const profile = DDX_PROFILES[activeScenarioKey] || DDX_PROFILES.default;
-  const hr = turn?.heart_rate || 100;
+  const hr = turn?.heart_rate || Math.round(currentHeartRate);
 
-  let p1 = Math.min(95, Math.max(50, profile[0].baseProb + (hr > 110 ? 4 : -4)));
+  let p1 = Math.min(95, Math.max(50, profile[0].baseProb + (hr > 115 ? 4 : -3)));
   let p2 = Math.max(4, Math.round((100 - p1) * 0.7));
   let p3 = Math.max(1, 100 - p1 - p2);
 
@@ -335,35 +385,54 @@ function updateDDxBoard(turn) {
 
 // --- 6. Quick Action Execution & Dispatch ---
 function executeQuickAction(commandText) {
-  if (isRequestInProgress) return;
-  const input = document.getElementById("action-input");
-  input.value = "";
-  clearInterval(gameLoopInterval);
+  if (isRequestInProgress || !currentSessionId) return;
+  stopGameLoop();
   logTimelineEvent("Doctor Order", commandText);
   sendActionToServer(commandText);
 }
 
 async function sendActionToServer(message) {
-  if (!currentSessionId || isRequestInProgress) return;
+  const reqId = Math.random().toString(36).substring(7);
+  console.log(`🚀 [İSTEK BAŞLADI] ID: #${reqId} | isRequestInProgress: ${isRequestInProgress} | Mesaj: ${message.substring(0, 45)}...`);
+
+  if (!currentSessionId || isRequestInProgress) {
+    console.warn(`🚫 [İSTEK ENGELLENDİ] ID: #${reqId} - Zaten aktif bir istek var veya oturum yok!`);
+    return;
+  }
 
   isRequestInProgress = true;
-  const submitBtn = document.getElementById("submit-btn");
-  if (submitBtn) submitBtn.disabled = true;
+  stopGameLoop();
+  setInteractionsDisabled(true);
 
   try {
+    const payload = {
+      message: message,
+      current_hr: Math.round(currentHeartRate),
+      current_spo2: currentSpO2,
+      current_bp: currentBP
+    };
+
+    console.log(`📤 [PAYLOAD GÖNDERİLİYOR] ID: #${reqId} -> Backend'e giden vitaller:`, payload);
+
     const res = await fetch(`${API_BASE}/session/${currentSessionId}/act`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify(payload),
     });
+    
     if (!res.ok) throw new Error("Request failed");
+    
     const turn = await res.json();
+    console.log(`📥 [YANIT GELDİ] ID: #${reqId} -> Gelen Stage: ${turn.turn_no} | Yeni HR: ${turn.heart_rate} | Bitti mi: ${turn.case_completed}`);
+    
     renderTurn(turn, message.startsWith("[") ? null : message, true);
   } catch (err) {
-    console.error("Action error:", err);
+    console.error(`❌ [İSTEK HATASI] ID: #${reqId}:`, err);
+    startGameLoop();
   } finally {
     isRequestInProgress = false;
-    if (submitBtn) submitBtn.disabled = false;
+    setInteractionsDisabled(false);
+    console.log(`🔓 [KİLİT AÇILDI] ID: #${reqId} tamamlandı.`);
   }
 }
 
@@ -374,7 +443,7 @@ document.getElementById("action-form").addEventListener("submit", (e) => {
   if (!message || isRequestInProgress) return;
 
   input.value = "";
-  clearInterval(gameLoopInterval);
+  stopGameLoop();
   logTimelineEvent("Custom Order", message);
   sendActionToServer(message);
 });
@@ -386,7 +455,7 @@ function logTimelineEvent(tag, desc) {
 
 function abortSession() {
   if (confirm("Conclude the simulation now and generate the jury evaluation report?")) {
-    clearInterval(gameLoopInterval);
+    stopGameLoop();
     finishSession();
   }
 }
@@ -402,6 +471,7 @@ function closeLabModal() {
 
 // --- 8. Scorecard & Timeline Replay ---
 async function finishSession() {
+  stopGameLoop();
   stopECGAnimation();
   try {
     const res = await fetch(`${API_BASE}/session/${currentSessionId}/end`, {
@@ -409,10 +479,15 @@ async function finishSession() {
     });
     const report = await res.json();
 
+    const actualTimeouts = sessionActionLogs.filter(
+      (l) => l.tag === "Timeout Error" || l.tag === "Threshold Breach"
+    ).length;
+    const finalWrong = Math.max(report.incorrect_actions || 0, actualTimeouts);
+
     document.getElementById("report-score").textContent = report.score;
     document.getElementById("report-badge").textContent = report.status_badge || "COMPLETED";
     document.getElementById("rep-correct").textContent = report.correct_actions || 0;
-    document.getElementById("rep-wrong").textContent = report.incorrect_actions || 0;
+    document.getElementById("rep-wrong").textContent = finalWrong;
     document.getElementById("rep-reaction").textContent = `${report.reaction_score || 5}/10`;
 
     document.getElementById("report-strengths").textContent = report.strengths;
@@ -435,9 +510,12 @@ function renderTimelineReplay() {
   sessionActionLogs.forEach((item) => {
     const row = document.createElement("div");
     row.className = "timeline-item";
+    const isTimeout = item.tag.includes("Timeout") || item.tag.includes("Breach");
+    const tagColor = isTimeout ? "#ef4444" : "#38bdf8";
+
     row.innerHTML = `
       <span class="timeline-time">[+${item.time}]</span>
-      <strong style="color: #38bdf8;">${item.tag}:</strong>
+      <strong style="color: ${tagColor};">${item.tag}:</strong>
       <span class="timeline-action">${item.desc}</span>
     `;
     container.appendChild(row);
@@ -446,7 +524,7 @@ function renderTimelineReplay() {
 
 function returnToMenu() {
   currentSessionId = null;
-  clearInterval(gameLoopInterval);
+  stopGameLoop();
   stopECGAnimation();
   showScreen("select");
   loadScenarios();
@@ -551,58 +629,46 @@ function initECGAnimation() {
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
-    // Nabız hızına göre kalp atım periyodu (saniye cinsinden)
     const validHR = Math.max(35, Math.min(220, currentHeartRate));
     const beatInterval = 60 / validHR;
 
     timeSinceLastBeat += dt;
 
-    // Yeni kalp atımı başladığında döngüyü ve bip tetikleyicisini sıfırla
     if (timeSinceLastBeat >= beatInterval) {
       timeSinceLastBeat %= beatInterval;
       hasBeepedThisBeat = false;
     }
 
-    // Monitörün yatay tarama hızı
     x += 2.2;
     if (x > width) {
       x = 0;
       points = [];
     }
 
-    // Fizyolojik P-Q-R-S-T dalga formu ve R-Zirve senkronizasyonu
     let y = midY;
     const t = timeSinceLastBeat;
 
     if (t >= 0.04 && t < 0.12) {
-      // P Dalgası
       y = midY - 6 * Math.sin(((t - 0.04) / 0.08) * Math.PI);
     } else if (t >= 0.13 && t < 0.16) {
-      // Q Çökmesi
       y = midY + 4;
     } else if (t >= 0.16 && t < 0.22) {
-      // R Dalgası (Zirve Vuruşu)
       y = midY - 48 * Math.sin(((t - 0.16) / 0.06) * Math.PI);
 
-      // Zirve anında tek seferlik hastane monitör sesi tetikle
       if (!hasBeepedThisBeat && t >= 0.18) {
         playBedsideBeep();
         hasBeepedThisBeat = true;
       }
     } else if (t >= 0.22 && t < 0.26) {
-      // S Çökmesi
       y = midY + 16;
     } else if (t >= 0.28 && t < 0.40) {
-      // T Dalgası
       y = midY - 12 * Math.sin(((t - 0.28) / 0.12) * Math.PI);
     } else {
-      // İzoelektrik hat ve hafif biyolojik osilasyon
       y = midY + (Math.random() - 0.5) * 1.5;
     }
 
     points.push({ x, y });
 
-    // Ekran izini silerek arkadan akma hissi veren fosfor efekti
     ctx.fillStyle = "rgba(3, 7, 18, 0.16)";
     ctx.fillRect(0, 0, width, height);
 

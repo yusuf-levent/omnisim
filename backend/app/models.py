@@ -30,6 +30,7 @@ class VitalState(Base):
     session_id = Column(String, ForeignKey("sim_sessions.id"))
     heart_rate = Column(Integer)
     blood_pressure = Column(String)  # e.g. "140/90"
+    spo2 = Column(Integer, default=92)  # <-- EKLENDİ
     consciousness = Column(String)   # "Alert", "Lethargic", "Unresponsive"
     turn_no = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
