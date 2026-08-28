@@ -24,17 +24,14 @@ app.add_middleware(
 
 def _history_from_logs(session: models.SimSession) -> list[dict]:
     history = []
-    
-    # Vitalleri tur numarasına göre haritala
     vitals_map = {}
     if hasattr(session, "vitals") and session.vitals:
         vitals_map = {v.turn_no: v for v in session.vitals}
-    
-    # session.logs üzerinde güvenli döngü
+
     for log in (session.logs or []):
         if log.user_message:
             history.append({"role": "user", "content": log.user_message})
-        
+
         vital = vitals_map.get(log.turn_no)
         assistant_payload = {
             "patient_dialogue": log.patient_dialogue or "",
@@ -45,10 +42,11 @@ def _history_from_logs(session: models.SimSession) -> list[dict]:
             "consciousness": getattr(vital, "consciousness", "Alert") if vital else "Alert",
         }
         history.append({
-            "role": "assistant", 
+            "role": "assistant",
             "content": json.dumps(assistant_payload, ensure_ascii=False)
         })
-    return history
+    # Son turları tut (ilkini değil) — model her seferinde en güncel bağlamı görmeli
+    return history[-6:]
 
 
 @app.get("/scenarios")
@@ -113,9 +111,9 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
         blood_pressure=bp_val,
         spo2=spo2_val,
         consciousness=cons_val,
-        heart_rate_drift=float(result.get("heart_rate_drift", -0.5)),
-        min_heart_rate=int(result.get("min_heart_rate", 60)),
-        max_heart_rate=int(result.get("max_heart_rate", 140)),
+        heart_rate_drift=float(result.get("heart_rate_drift", 0.4)),
+        min_heart_rate=int(result.get("min_heart_rate", 35)),
+        max_heart_rate=int(result.get("max_heart_rate", 185)),
         case_completed=bool(result.get("case_completed", False)),
     )
     return SessionStartResponse(session_id=session.id, scenario_type=scenario_type, turn=turn)
@@ -123,8 +121,6 @@ def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
 
 @app.post("/session/{session_id}/act", response_model=TurnResponse)
 def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db)):
-    print(f"\n🔔 [BACKEND ACT ÇAĞRILDI] Session: {session_id[:8]}... | Gelen HR: {action.current_hr} | Mesaj: {action.message[:40]}")
-    
     session = db.query(models.SimSession).filter_by(id=session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -134,31 +130,24 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
     scenario = get_scenario(session.scenario_type)
     history = _history_from_logs(session)
 
-    # Anlık frontend vital durumunu LLM promptuna meta-bilgi olarak bağla
     vital_context = ""
     if action.current_hr is not None:
         vital_context = f"[CURRENT VITALS: HR={action.current_hr} bpm, SpO2={action.current_spo2}%, BP={action.current_bp}] "
-    
-    full_user_message = f"{vital_context}{action.message}"
 
+    full_user_message = f"{vital_context}{action.message}"
     result = llm_service.process_turn(scenario["prompt"], history, full_user_message)
 
     new_turn_no = session.turn_count + 1
     force_end = new_turn_no >= MAX_TURNS
     is_critical_breach = "[CRITICAL THRESHOLD" in action.message
-    case_completed = bool(result.get("case_completed", False)) or force_end or is_critical_breach
 
-    # 1. LLM Ham Çıktısı
+    # Karar tamamen LLM'in klinik değerlendirmesine bırakıldı
+    llm_completed = bool(result.get("case_completed", False))
+    case_completed = llm_completed or force_end or is_critical_breach
+
     raw_hr = int(result.get("heart_rate", action.current_hr or 110))
-    
-    # 2. Fizyolojik Süreklilik ve Sıçrama Önleyici Filtre
     if action.current_hr is not None:
-        if "[TIMEOUT" in action.message or "[CRITICAL" in action.message:
-            # Müdahale yokken veya timeout durumunda nabız ASLA geriye düşemez, en az +2 artar
-            hr_val = max(action.current_hr + 2, raw_hr)
-        else:
-            # İlaç/müdahale yapıldığında tek turda en fazla ±12 bpm değişebilir (yumuşak toparlanma)
-            hr_val = max(action.current_hr - 12, min(action.current_hr + 12, raw_hr))
+        hr_val = max(action.current_hr - 15, min(action.current_hr + 15, raw_hr))
     else:
         hr_val = raw_hr
 
@@ -200,16 +189,38 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
         blood_pressure=bp_val,
         spo2=spo2_val,
         consciousness=cons_val,
-        heart_rate_drift=float(result.get("heart_rate_drift", -0.5)),
-        min_heart_rate=int(result.get("min_heart_rate", 60)),
-        max_heart_rate=int(result.get("max_heart_rate", 140)),
+        heart_rate_drift=float(result.get("heart_rate_drift", 0.4)),
+        min_heart_rate=int(result.get("min_heart_rate", 35)),
+        max_heart_rate=int(result.get("max_heart_rate", 185)),
         case_completed=case_completed,
     )
+
+
 @app.post("/session/{session_id}/end", response_model=ReportResponse)
 def end_session(session_id: str, db: DBSession = Depends(get_db)):
     session = db.query(models.SimSession).filter_by(id=session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    existing_report = db.query(models.ReportResult).filter_by(session_id=session_id).first()
+    if existing_report:
+        return ReportResponse(
+            session_id=session_id,
+            score=existing_report.score,
+            status_badge="COMPLETED",
+            correct_actions=0,
+            incorrect_actions=0,
+            reaction_score=5,
+            criteria={
+                "protocol_adherence": 15,
+                "diagnostic_accuracy": 15,
+                "patient_safety": 15,
+                "pharmacology_precision": 15,
+            },
+            strengths=existing_report.strengths,
+            errors=existing_report.errors,
+            suggestions=existing_report.suggestions,
+        )
 
     scenario = get_scenario(session.scenario_type)
     history = _history_from_logs(session)

@@ -8,13 +8,14 @@ let currentSpO2 = 94;
 let currentBP = "150/95";
 let currentConsciousness = "Alert";
 let heartRateDrift = 0.4;
-let minHeartRate = 50;
-let maxHeartRate = 140;
+let minHeartRate = 35;
+let maxHeartRate = 185;
 let timeLeft = 30;
 const TURN_DURATION = 30;
 let gameLoopInterval = null;
 let isRequestInProgress = false;
 let hasBreachedThreshold = false;
+let isEndingSession = false;
 
 // Event Timeline Tracking
 let sessionActionLogs = [];
@@ -25,7 +26,7 @@ let audioCtx = null;
 let isAudioEnabled = true;
 let cachedReportData = null;
 
-// Dynamic Differential Diagnosis (DDx) Profiles
+// 1. Dynamic Differential Diagnosis (DDx) Profiles
 const DDX_PROFILES = {
   acute_coronary_syndrome: [
     { name: "Acute Anterior STEMI / ACS", baseProb: 88, color: "red" },
@@ -57,6 +58,31 @@ const DDX_PROFILES = {
     { name: "Ruptured Ectopic / Abdominal Trauma", baseProb: 8, color: "yellow" },
     { name: "Septic Shock", baseProb: 4, color: "blue" },
   ],
+  status_asthmaticus: [
+    { name: "Severe Status Asthmaticus", baseProb: 88, color: "red" },
+    { name: "Foreign Body Aspiration", baseProb: 7, color: "yellow" },
+    { name: "Tension Pneumothorax", baseProb: 5, color: "blue" },
+  ],
+  tension_pneumothorax: [
+    { name: "Tension Pneumothorax", baseProb: 90, color: "red" },
+    { name: "Cardiac Tamponade", baseProb: 6, color: "yellow" },
+    { name: "Massive Hemothorax", baseProb: 4, color: "blue" },
+  ],
+  septic_shock: [
+    { name: "Septic Shock (Urosepsis)", baseProb: 86, color: "red" },
+    { name: "Adrenal Crisis", baseProb: 8, color: "yellow" },
+    { name: "Cardiogenic Shock", baseProb: 6, color: "blue" },
+  ],
+  opioid_overdose: [
+    { name: "Acute Opioid Toxicity", baseProb: 92, color: "red" },
+    { name: "Severe Hypothermia / Myxedema", baseProb: 5, color: "yellow" },
+    { name: "Brainstem Hemorrhage", baseProb: 3, color: "blue" },
+  ],
+  acute_opioid_toxicity: [
+    { name: "Acute Opioid Toxicity", baseProb: 92, color: "red" },
+    { name: "Severe Hypothermia / Myxedema", baseProb: 5, color: "yellow" },
+    { name: "Brainstem Hemorrhage", baseProb: 3, color: "blue" },
+  ],
   default: [
     { name: "Primary Clinical Condition", baseProb: 85, color: "red" },
     { name: "Secondary Differential", baseProb: 10, color: "yellow" },
@@ -64,7 +90,7 @@ const DDX_PROFILES = {
   ],
 };
 
-// Scenario-Specific Quick Action Chips
+// 2. Scenario-Specific Quick Actions
 const QUICK_ACTIONS = {
   acute_coronary_syndrome: [
     { label: "🫁 High-Flow O2", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
@@ -92,6 +118,7 @@ const QUICK_ACTIONS = {
   ],
   anaphylactic_shock: [
     { label: "💉 IM Epinephrine 0.3mg", cmd: "Administer IM Epinephrine 0.3mg (1:1000) anterolateral thigh" },
+    { label: "🫁 High-Flow O2 via NRB", cmd: "Administer 100% High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
     { label: "💧 1000mL Saline Bolus", cmd: "Infuse 1000mL 0.9% Normal Saline rapid pressure bag" },
     { label: "💊 IV Diphenhydramine 50mg", cmd: "Administer IV Diphenhydramine 50mg" },
     { label: "💉 IV Methylprednisolone", cmd: "Administer IV Methylprednisolone 125mg" },
@@ -101,7 +128,7 @@ const QUICK_ACTIONS = {
   diabetic_ketoacidosis: [
     { label: "💧 1L 0.9% Normal Saline", cmd: "Infuse 1 Liter 0.9% Normal Saline IV bolus" },
     { label: "🩸 Stat VBG, K+, Glucose", cmd: "Draw Stat VBG, Potassium, Beta-hydroxybutyrate, Glucose" },
-    { label: "💉 Regular Insulin Bolus", cmd: "Administer Regular Insulin IV 0.1 units/kg bolus" },
+    { label: "💉 Regular Insulin Drip", cmd: "Initiate IV Regular Insulin continuous infusion at 0.1 units/kg/hr (No bolus)" },
     { label: "🧪 IV Potassium 20mEq", cmd: "Add 20 mEq Potassium Chloride to IV maintenance fluids" },
     { label: "📊 Continuous Glucose Mon", cmd: "Establish hourly point-of-care capillary glucose monitoring" },
     { label: "⚠️ Monitor Anion Gap", cmd: "Calculate and monitor serum anion gap and osmolality", warning: true },
@@ -114,6 +141,46 @@ const QUICK_ACTIONS = {
     { label: "💉 Tranexamic Acid (TXA)", cmd: "Administer 1g IV Tranexamic Acid (TXA) over 10 minutes" },
     { label: "🚨 Massive Transfusion (MTP)", cmd: "Activate Massive Transfusion Protocol (1:1:1)", warning: true },
   ],
+  status_asthmaticus: [
+    { label: "🫁 High-Flow O2 via NRB", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min, target SpO2 93-95%)" },
+    { label: "💨 Neb Albuterol + Ipratropium", cmd: "Start Continuous Nebulized Albuterol 5mg + Ipratropium Bromide 0.5mg" },
+    { label: "💉 IV Methylprednisolone 125mg", cmd: "Administer IV Methylprednisolone 125mg bolus" },
+    { label: "🧪 IV Magnesium Sulfate 2g", cmd: "Infuse IV Magnesium Sulfate 2g over 20 minutes" },
+    { label: "💉 SubQ Epinephrine 0.3mg", cmd: "Administer Subcutaneous Epinephrine 0.3mg (1:1000) for refractory bronchospasm" },
+    { label: "🚨 Prep RSI & Ketamine", cmd: "Prepare Rapid Sequence Intubation tray with Ketamine for bronchodilation", warning: true },
+  ],
+  tension_pneumothorax: [
+    { label: "⚡ Immediate Needle Decompression", cmd: "Perform immediate needle decompression with 14G angiocath at 2nd ICS mid-clavicular line" },
+    { label: "🫁 Emergent Tube Thoracostomy", cmd: "Place 28-32 Fr chest tube at 5th ICS anterior-axillary line and connect to water seal" },
+    { label: "🫁 High-Flow O2 via NRB", cmd: "Administer 100% High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
+    { label: "🔍 Stat Bedside eFAST Ultrasound", cmd: "Perform immediate eFAST ultrasound evaluating lung sliding and pericardial space" },
+    { label: "🩸 Rapid Crystalloid Bolus", cmd: "Infuse 1000mL warmed Normal Saline wide open to assist venous return" },
+    { label: "⚠️ Order Portable CXR", cmd: "Order stat portable AP chest radiograph (Warning: Do not delay decompression!)", warning: true },
+  ],
+  septic_shock: [
+    { label: "🩸 Stat Blood/Urine Cultures", cmd: "Draw 2 sets of Blood Cultures and Urine Culture stat prior to antibiotics" },
+    { label: "💉 IV Broad-Spectrum Antibiotics", cmd: "Administer IV Ceftriaxone 2g and IV Vancomycin 1.5g within Hour-1 Sepsis Bundle" },
+    { label: "💧 30 mL/kg Crystalloid Bolus", cmd: "Infuse 30 mL/kg IV 0.9% Normal Saline rapid bolus under pressure bag" },
+    { label: "🧪 Stat Serum Lactate", cmd: "Draw Stat Serum Lactate and repeat in 2 hours" },
+    { label: "💊 IV Norepinephrine Drip", cmd: "Start central IV Norepinephrine infusion at 5 mcg/min titrating for MAP >= 65 mmHg" },
+    { label: "🚨 Central Venous Line", cmd: "Place Right Internal Jugular Central Venous Line (CVC)", warning: true },
+  ],
+  opioid_overdose: [
+    { label: "🫁 Bag-Valve-Mask (BVM) 100% O2", cmd: "Initiate immediate Bag-Valve-Mask ventilation with 100% Oxygen (12 breaths/min)" },
+    { label: "💉 IV Naloxone 0.4mg Titrated", cmd: "Administer IV Naloxone 0.4mg bolus titrated to restore spontaneous respiration" },
+    { label: "👃 Intranasal Naloxone 2mg", cmd: "Administer Intranasal Naloxone 2mg via mucosal atomizer device (MAD)" },
+    { label: "🩸 Stat Blood Gas & Tox Panel", cmd: "Draw Stat Arterial Blood Gas (ABG), Serum Acetaminophen level, and Urine Tox Screen" },
+    { label: "🌡️ Core Temp & Warming", cmd: "Check core rectal temperature and initiate passive rewarming" },
+    { label: "🚨 Prep Endotracheal Tube", cmd: "Prepare Endotracheal Intubation tray if refractory to Naloxone", warning: true },
+  ],
+  acute_opioid_toxicity: [
+    { label: "🫁 Bag-Valve-Mask (BVM) 100% O2", cmd: "Initiate immediate Bag-Valve-Mask ventilation with 100% Oxygen (12 breaths/min)" },
+    { label: "💉 IV Naloxone 0.4mg Titrated", cmd: "Administer IV Naloxone 0.4mg bolus titrated to restore spontaneous respiration" },
+    { label: "👃 Intranasal Naloxone 2mg", cmd: "Administer Intranasal Naloxone 2mg via mucosal atomizer device (MAD)" },
+    { label: "🩸 Stat Blood Gas & Tox Panel", cmd: "Draw Stat Arterial Blood Gas (ABG), Serum Acetaminophen level, and Urine Tox Screen" },
+    { label: "🌡️ Core Temp & Warming", cmd: "Check core rectal temperature and initiate passive rewarming" },
+    { label: "🚨 Prep Endotracheal Tube", cmd: "Prepare Endotracheal Intubation tray if refractory to Naloxone", warning: true },
+  ],
   default: [
     { label: "🫁 High-Flow O2", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
     { label: "🩸 Dual Large-Bore IV", cmd: "Establish dual large-bore 18G IV peripheral lines" },
@@ -122,7 +189,7 @@ const QUICK_ACTIONS = {
   ],
 };
 
-// Scenario-Specific Lab & Diagnostics Results
+// 3. Scenario-Specific Laboratory Panels
 const LAB_PANELS = {
   acute_coronary_syndrome: {
     ecgTitle: "12-LEAD TELEMETRY FINDINGS",
@@ -159,6 +226,36 @@ const LAB_PANELS = {
     ecg: "<strong>Bedside FAST US:</strong> Positive free fluid in Morrison's pouch and splenorenal recess.<br><strong>Rhythm:</strong> Sinus Tachycardia @ 138 bpm with narrow QRS complexes.",
     labsTitle: "STAT BLOOD & COAGULATION",
     labs: "<strong>Hemoglobin / Hct:</strong> <span class='text-danger'>6.8 g/dL / 20.4%</span><br><strong>Serum Lactate:</strong> <span class='text-danger'>5.2 mmol/L (Severe tissue hypoperfusion)</span><br><strong>ABG:</strong> pH 7.22, Base Deficit -9.5 mEq/L<br><strong>Platelets / Fibrinogen:</strong> 110k / 140 mg/dL",
+  },
+  status_asthmaticus: {
+    ecgTitle: "PULMONARY MECHANICS & TELEMETRY",
+    ecg: "<strong>Peak Expiratory Flow (PEF):</strong> <span class='text-danger'>< 30% predicted (Severe Airway Obstruction)</span><br><strong>Auscultation:</strong> Markedly diminished breath sounds ('Silent Chest'), profound expiratory phase prolongation.<br><strong>Telemetry:</strong> Sinus Tachycardia @ 132 bpm with Right Ventricular Strain (P-pulmonale).",
+    labsTitle: "STAT ARTERIAL BLOOD GAS (ABG)",
+    labs: "<strong>pH:</strong> <span class='text-danger'>7.26 (Acute Respiratory Acidosis)</span><br><strong>pCO2:</strong> <span class='text-danger'>52 mmHg (Elevated - Impending Respiratory Failure)</span><br><strong>pO2:</strong> 58 mmHg (Severe Hypoxemia on room air)<br><strong>Lactate:</strong> 2.8 mmol/L (Secondary to work of breathing)",
+  },
+  tension_pneumothorax: {
+    ecgTitle: "TRAUMA THORACIC eFAST & TELEMETRY",
+    ecg: "<strong>Bedside eFAST US:</strong> Complete absence of lung sliding on Right hemithorax (Stratosphere/Barcode Sign). Positive lung point. No pericardial effusion.<br><strong>Telemetry:</strong> Sinus Tachycardia @ 144 bpm, low-voltage QRS complexes secondary to intrathoracic pressure.",
+    labsTitle: "STAT BLOOD GAS & TRAUMA BIOMARKERS",
+    labs: "<strong>Arterial Blood Gas (ABG):</strong> <span class='text-danger'>pH 7.18, pO2 52 mmHg (Critical Hypoxia), pCO2 56</span><br><strong>Base Deficit:</strong> -8.2 mEq/L (Severe tissue hypoperfusion)<br><strong>Serum Lactate:</strong> <span class='text-danger'>4.6 mmol/L</span><br><strong>Hemoglobin / Hematocrit:</strong> 13.8 g/dL / 41% (Normovolemic)",
+  },
+  septic_shock: {
+    ecgTitle: "SEPSIS TELEMETRY & HEMODYNAMICS",
+    ecg: "<strong>Telemetry:</strong> Sinus Tachycardia @ 132 bpm with bounding pulses.<br><strong>Hemodynamics:</strong> Calculated Mean Arterial Pressure (MAP) = 54 mmHg (Target >= 65 mmHg).",
+    labsTitle: "STAT SEPSIS BIOMARKERS",
+    labs: "<strong>Serum Lactate:</strong> <span class='text-danger'>4.8 mmol/L (Severe Tissue Hypoperfusion)</span><br><strong>White Blood Cells (WBC):</strong> 18.4 x10^3/mcL (Bands 16%)<br><strong>Creatinine:</strong> 2.1 mg/dL (Acute Kidney Injury)<br><strong>Urinalysis:</strong> Gross pyuria, positive leukocyte esterase & nitrites",
+  },
+  opioid_overdose: {
+    ecgTitle: "AIRWAY, NEUROLOGY & TELEMETRY",
+    ecg: "<strong>Airway & Breathing:</strong> Pinpoint pupils (1mm miosis), GCS 3 (E1V1M1), agonal RR 4/min without airway reflexes.<br><strong>Telemetry:</strong> Sinus Bradycardia @ 50-52 bpm, prolonged QTc intervals.",
+    labsTitle: "STAT TOXICOLOGY & BLOOD GAS (ABG)",
+    labs: "<strong>Arterial Blood Gas (ABG):</strong> <span class='text-danger'>pH 7.15, pCO2 72 mmHg (Severe Hypercapnic Acidosis), pO2 48 mmHg</span><br><strong>Serum Lactate:</strong> 3.2 mmol/L<br><strong>Urine Drug Screen:</strong> <span class='text-danger'>Positive for Opiates / Synthetic Fentanyl</span><br><strong>Acetaminophen / Salicylates:</strong> Undetectable (< 5 mcg/mL)",
+  },
+  acute_opioid_toxicity: {
+    ecgTitle: "AIRWAY, NEUROLOGY & TELEMETRY",
+    ecg: "<strong>Airway & Breathing:</strong> Pinpoint pupils (1mm miosis), GCS 3 (E1V1M1), agonal RR 4/min without airway reflexes.<br><strong>Telemetry:</strong> Sinus Bradycardia @ 50-52 bpm, prolonged QTc intervals.",
+    labsTitle: "STAT TOXICOLOGY & BLOOD GAS (ABG)",
+    labs: "<strong>Arterial Blood Gas (ABG):</strong> <span class='text-danger'>pH 7.15, pCO2 72 mmHg (Severe Hypercapnic Acidosis), pO2 48 mmHg</span><br><strong>Serum Lactate:</strong> 3.2 mmol/L<br><strong>Urine Drug Screen:</strong> <span class='text-danger'>Positive for Opiates / Synthetic Fentanyl</span><br><strong>Acetaminophen / Salicylates:</strong> Undetectable (< 5 mcg/mL)",
   },
   default: {
     ecgTitle: "TELEMETRY OVERVIEW",
@@ -199,7 +296,7 @@ function initAudioContext() {
 }
 
 function playBedsideBeep() {
-  if (!isAudioEnabled || !audioCtx || currentConsciousness === "Unresponsive") return;
+  if (!isAudioEnabled || !audioCtx || currentHeartRate <= 30) return;
   try {
     const now = audioCtx.currentTime;
 
@@ -279,21 +376,53 @@ async function loadScenarios() {
   }
 }
 
-// --- 3. Dynamic Quick Chips & Diagnostics Renderer ---
-function renderQuickActions() {
-  const container = document.getElementById("quick-action-container");
-  if (!container) return;
+function shuffleArray(array) {
+  if (!Array.isArray(array)) return [];
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
-  const actions = QUICK_ACTIONS[activeScenarioKey] || QUICK_ACTIONS.default;
-  container.innerHTML = actions
-    .map(
-      (act) => `
-    <button type="button" class="chip-btn ${act.warning ? "warning" : ""}" onclick="executeQuickAction('${act.cmd.replace(/'/g, "\\'")}')">
-      ${act.label}
-    </button>
-  `
-    )
-    .join("");
+// --- 3. Dynamic Quick Chips & Diagnostics Renderer ---
+function renderQuickActions(actions) {
+  let container = 
+    document.getElementById("quick-actions") || 
+    document.getElementById("quick-actions-container") ||
+    document.getElementById("actions-container") ||
+    document.getElementById("quick-chips") ||
+    document.querySelector(".quick-actions") ||
+    document.querySelector(".chip-container") ||
+    document.getElementById("quick-action-container");
+
+  const actionForm = document.getElementById("action-form");
+  if (!container && actionForm && actionForm.previousElementSibling) {
+    container = actionForm.previousElementSibling;
+  }
+
+  if (!container) {
+    console.error("Buton kapsayıcısı bulunamadı!");
+    return;
+  }
+
+  container.innerHTML = "";
+
+  const listToRender = actions || QUICK_ACTIONS[activeScenarioKey] || QUICK_ACTIONS.default || [];
+  const randomizedActions = shuffleArray(listToRender);
+
+  randomizedActions.forEach((action) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `chip-btn ${action.warning ? "warning" : ""}`.trim();
+    btn.textContent = action.label;
+    btn.onclick = (e) => {
+      e.preventDefault();
+      executeQuickAction(action.cmd);
+    };
+    container.appendChild(btn);
+  });
 }
 
 function renderLabModal() {
@@ -318,6 +447,8 @@ async function startSession(scenarioType) {
   activeScenarioKey = scenarioType || "acute_coronary_syndrome";
   hasBreachedThreshold = false;
   isRequestInProgress = false;
+  isEndingSession = false;
+  stopGameLoop();
   initAudioContext();
 
   try {
@@ -344,6 +475,10 @@ async function startSession(scenarioType) {
     currentHeartRate = hr;
     currentSpO2 = spo2;
     currentBP = bp;
+    currentConsciousness = data.turn?.consciousness || "Alert";
+    minHeartRate = data.turn?.min_heart_rate !== undefined ? data.turn.min_heart_rate : 35;
+    maxHeartRate = data.turn?.max_heart_rate !== undefined ? data.turn.max_heart_rate : 185;
+    heartRateDrift = data.turn?.heart_rate_drift !== undefined ? data.turn.heart_rate_drift : 0.4;
 
     document.getElementById("patient-display-name").textContent = `${age} Y/O ${gender}`;
     document.getElementById("patient-age").textContent = age;
@@ -375,7 +510,7 @@ function closePatientModal() {
   startGameLoop();
 }
 
-// --- 5. Ticking Simulation Engine (Safe & Debounced) ---
+// --- 5. Ticking Simulation Engine ---
 function stopGameLoop() {
   if (gameLoopInterval !== null) {
     clearInterval(gameLoopInterval);
@@ -399,14 +534,14 @@ function startGameLoop() {
     const hrEl = document.getElementById("vital-nabiz");
     if (hrEl) hrEl.textContent = roundedHR;
 
-    // Kritik Güvenlik Eşiği Denetimi
+    // Critical Safety Threshold Detection
     if ((roundedHR <= minHeartRate || roundedHR >= maxHeartRate) && !hasBreachedThreshold) {
       hasBreachedThreshold = true;
       stopGameLoop();
       logTimelineEvent("Threshold Breach", `Heart rate critical (${roundedHR} bpm)`);
       sendActionToServer(`[CRITICAL THRESHOLD BREACHED: Heart Rate reached ${roundedHR} bpm! Patient entering cardiovascular collapse!]`);
     } 
-    // 30 Saniye Timeout Denetimi
+    // 30s Timeout Detection
     else if (timeLeft <= 0) {
       stopGameLoop();
       logTimelineEvent("Timeout Error", "30s elapsed with zero interventions");
@@ -460,8 +595,8 @@ function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   currentBP = turn?.blood_pressure || currentBP;
   currentConsciousness = turn?.consciousness || "Alert";
   heartRateDrift = turn?.heart_rate_drift !== undefined ? turn.heart_rate_drift : 0.4;
-  minHeartRate = turn?.min_heart_rate || 50;
-  maxHeartRate = turn?.max_heart_rate || 140;
+  minHeartRate = turn?.min_heart_rate !== undefined ? turn.min_heart_rate : 35;
+  maxHeartRate = turn?.max_heart_rate !== undefined ? turn.max_heart_rate : 185;
 
   document.getElementById("vital-nabiz").textContent = Math.round(currentHeartRate);
   document.getElementById("vital-tansiyon").textContent = currentBP;
@@ -472,9 +607,9 @@ function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   updateDDxBoard(turn);
   log.scrollTop = log.scrollHeight;
 
-  if (turn?.case_completed || turn?.consciousness === "Unresponsive") {
+  if (turn?.case_completed === true) {
     stopGameLoop();
-    setTimeout(() => finishSession(), 1500);
+    finishSession(); 
   } else if (shouldStartTimer) {
     startGameLoop();
   }
@@ -520,18 +655,51 @@ function updateDDxBoard(turn) {
 
 // --- 7. Quick Action Execution & Dispatch ---
 function executeQuickAction(commandText) {
-  if (isRequestInProgress || !currentSessionId) return;
+  if (isRequestInProgress || !currentSessionId || isEndingSession) return;
+  
   stopGameLoop();
   logTimelineEvent("Doctor Order", commandText);
   sendActionToServer(commandText);
 }
 
+// KESİN ÇÖZÜM: 2. Kez basıldığında logların ve döngünün kilitlenmesini önleyen, tamamen İngilizce dinamik geri bildirimli sendActionToServer
 async function sendActionToServer(message) {
-  if (!currentSessionId || isRequestInProgress) return;
+  if (!currentSessionId || isEndingSession) return;
+  if (isRequestInProgress) return; // Çift tıklama kilitlenmesini engeller
 
   isRequestInProgress = true;
   stopGameLoop();
   setInteractionsDisabled(true);
+
+  // 1. Kullanıcının hamlesini anında ekrana basıyoruz
+  if (!message.startsWith("[")) {
+    appendLogEntry("user", message);
+  }
+
+  // 2. Müdahale türüne göre akıllı İngilizce dinamik yükleniyor mesajı belirleme
+  let loadingText = "⏳ Preparing medication & executing clinical order...";
+  const lowerMsg = message.toLowerCase();
+  if (lowerMsg.includes("ecg") || lowerMsg.includes("ct") || lowerMsg.includes("labs") || lowerMsg.includes("xray") || lowerMsg.includes("fast") || lowerMsg.includes("blood gas")) {
+    loadingText = "⏳ Ordering stat diagnostics & analyzing clinical data...";
+  } else if (lowerMsg.includes("tube") || lowerMsg.includes("bvm") || lowerMsg.includes("decompression") || lowerMsg.includes("intubation") || lowerMsg.includes("bipap")) {
+    loadingText = "⏳ Preparing airway & procedural equipment...";
+  } else if (lowerMsg.includes("oxygen") || lowerMsg.includes("o2")) {
+    loadingText = "⏳ Adjusting respiratory support & oxygen flow...";
+  }
+
+  // 3. Geçici Yükleniyor (Loading) Durumu Log Ekranına Ekleniyor
+  const log = document.getElementById("chat-log");
+  const loadingId = "loading-" + Date.now();
+  const loadingEntry = document.createElement("div");
+  loadingEntry.id = loadingId;
+  loadingEntry.className = "log-entry sistem clinical-loading";
+  loadingEntry.innerHTML = `
+    <span class="loading-pulse" aria-hidden="true"></span>
+    <span class="loading-copy">${loadingText}</span>
+    <span class="loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+  `;
+  log.appendChild(loadingEntry);
+  log.scrollTop = log.scrollHeight;
 
   try {
     const payload = {
@@ -547,14 +715,23 @@ async function sendActionToServer(message) {
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error("Request failed");
+    if (!res.ok) throw new Error("Backend connection failed");
 
     const turn = await res.json();
-    renderTurn(turn, message.startsWith("[") ? null : message, true);
+    
+    // 4. Backend'den cevap gelince geçici Yükleniyor ibaresini kaldır
+    const loadingEl = document.getElementById(loadingId);
+    if (loadingEl) loadingEl.remove();
+
+    renderTurn(turn, null, true);
   } catch (err) {
     console.error("Action error:", err);
+    const loadingEl = document.getElementById(loadingId);
+    if (loadingEl) loadingEl.remove();
+    
     startGameLoop();
   } finally {
+    // 5. Kritik: İstek bittiği an bayrağı ve buton kilitlerini temizle ki 2., 3. ve sonraki basışlarda asla kilitlenme olmasın
     isRequestInProgress = false;
     setInteractionsDisabled(false);
   }
@@ -634,12 +811,16 @@ function playOutcomeAudio(isSuccess) {
 
 // --- 9. Scorecard & Transition Modal ---
 async function finishSession() {
+  if (isEndingSession || !currentSessionId) return;
+  isEndingSession = true;
+
   stopGameLoop();
   stopECGAnimation();
   try {
     const res = await fetch(`${API_BASE}/session/${currentSessionId}/end`, {
       method: "POST",
     });
+    if (!res.ok) throw new Error("Could not fetch evaluation report.");
     cachedReportData = await res.json();
 
     const isSuccess =
@@ -673,6 +854,8 @@ async function finishSession() {
     document.getElementById("outcome-modal").classList.add("active");
   } catch (err) {
     alert("Error fetching report: " + err.message);
+  } finally {
+    isEndingSession = false;
   }
 }
 
@@ -686,11 +869,15 @@ function proceedToScorecard() {
   ).length;
   const finalWrong = Math.max(report.incorrect_actions || 0, actualTimeouts);
 
+  let rawReaction = report.reaction_score !== undefined ? report.reaction_score : 8;
+  if (rawReaction > 10) rawReaction = Math.round(rawReaction / 10);
+  rawReaction = Math.max(1, Math.min(10, rawReaction));
+
   document.getElementById("report-score").textContent = report.score;
   document.getElementById("report-badge").textContent = report.status_badge || "COMPLETED";
   document.getElementById("rep-correct").textContent = report.correct_actions || 0;
   document.getElementById("rep-wrong").textContent = finalWrong;
-  document.getElementById("rep-reaction").textContent = `${report.reaction_score || 5}/10`;
+  document.getElementById("rep-reaction").textContent = `${rawReaction}/10`;
 
   document.getElementById("report-strengths").textContent = report.strengths;
   document.getElementById("report-mistakes").textContent = report.errors;
@@ -701,7 +888,7 @@ function proceedToScorecard() {
   drawRadarChart(report.criteria);
 }
 
-// --- Yenilenmiş Rozetli Görsel Timeline Replay ---
+// --- Visual Timeline Replay ---
 function renderTimelineReplay() {
   const container = document.getElementById("timeline-events");
   if (!container) return;
@@ -743,13 +930,14 @@ function returnToMenu() {
   currentSessionId = null;
   hasBreachedThreshold = false;
   isRequestInProgress = false;
+  isEndingSession = false;
   stopGameLoop();
   stopECGAnimation();
   showScreen("select");
   loadScenarios();
 }
 
-// --- Yenilenmiş Klinik Yetkinlik Radar Grafiği ---
+// --- Clinical Competencies Radar Chart ---
 function drawRadarChart(criteria = {}) {
   const canvas = document.getElementById("radar-canvas");
   if (!canvas) return;
@@ -758,16 +946,15 @@ function drawRadarChart(criteria = {}) {
   const height = canvas.height;
   const cx = width / 2;
   const cy = height / 2;
-  const radius = 95;
+  const radius = 88;
 
   ctx.clearRect(0, 0, width, height);
 
-  // Tıbbi Performans Yetkinlik Eksenleri (Geriye Dönük Uyumluluklu)
   const axes = [
-    { label: "Protocol Adherence", val: criteria?.protocol_adherence ?? criteria?.educational_impact ?? 18 },
-    { label: "Diagnostic Accuracy", val: criteria?.diagnostic_accuracy ?? criteria?.creative_ai_use ?? 18 },
-    { label: "Patient Safety", val: criteria?.patient_safety ?? criteria?.technical_execution ?? 18 },
-    { label: "Pharmacology & Dosage", val: criteria?.pharmacology_precision ?? criteria?.pitch_demo ?? 18 },
+    { label: "Protocol Adherence", val: criteria?.protocol_adherence ?? 18 },
+    { label: "Diagnostic Accuracy", val: criteria?.diagnostic_accuracy ?? 18 },
+    { label: "Patient Safety", val: criteria?.patient_safety ?? 18 },
+    { label: "Pharmacology", val: criteria?.pharmacology_precision ?? 18 },
   ];
 
   const totalAxes = axes.length;
@@ -787,7 +974,7 @@ function drawRadarChart(criteria = {}) {
   }
 
   ctx.fillStyle = "#94a3b8";
-  ctx.font = "bold 10px 'Plus Jakarta Sans'";
+  ctx.font = "bold 9.5px 'Plus Jakarta Sans'";
   ctx.textAlign = "center";
 
   for (let i = 0; i < totalAxes; i++) {
@@ -801,8 +988,8 @@ function drawRadarChart(criteria = {}) {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
     ctx.stroke();
 
-    const lx = cx + Math.cos(angle) * (radius + 24);
-    const ly = cy + Math.sin(angle) * (radius + 18);
+    const lx = cx + Math.cos(angle) * (radius + 20);
+    const ly = cy + Math.sin(angle) * (radius + 14);
     ctx.fillText(`${axes[i].label} (${axes[i].val}/25)`, lx, ly);
   }
 
@@ -825,7 +1012,7 @@ function drawRadarChart(criteria = {}) {
   ctx.stroke();
 }
 
-// --- 10. Synchronized Real-Time Telemetry ECG (Flatline & Artery Aware) ---
+// --- 10. Synchronized Real-Time Telemetry ECG ---
 let ecgAnimationId = null;
 let lastFrameTime = null;
 let timeSinceLastBeat = 0;
@@ -852,7 +1039,7 @@ function initECGAnimation() {
     const dt = (now - lastFrameTime) / 1000;
     lastFrameTime = now;
 
-    const isFlatline = currentConsciousness === "Unresponsive" || currentHeartRate <= 30;
+    const isFlatline = currentHeartRate <= 30;
     const validHR = Math.max(35, Math.min(220, currentHeartRate));
     const beatInterval = 60 / validHR;
 

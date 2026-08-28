@@ -27,7 +27,7 @@ class VitalState(Base):
     __tablename__ = "vital_states"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String, ForeignKey("sim_sessions.id"))
+    session_id = Column(String, ForeignKey("sim_sessions.id"), index=True)
     heart_rate = Column(Integer)
     blood_pressure = Column(String)  # e.g. "140/90"
     spo2 = Column(Integer, default=92)  # <-- EKLENDİ
@@ -42,7 +42,7 @@ class InteractionLog(Base):
     __tablename__ = "interaction_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String, ForeignKey("sim_sessions.id"))
+    session_id = Column(String, ForeignKey("sim_sessions.id"), index=True)
     turn_no = Column(Integer)
     user_message = Column(Text, nullable=True)
     patient_dialogue = Column(Text)
