@@ -7,7 +7,15 @@ from . import models
 from .core.config import get_frontend_origins
 from .db.database import get_db
 from .scenarios import SCENARIOS, get_scenario
-from .schemas import ActionRequest, TurnResponse, ReportResponse, SessionStartResponse
+from .schemas import (
+    ActionRequest,
+    LearnerCaseSummary,
+    LearnerLoginRequest,
+    LearnerProfileResponse,
+    ReportResponse,
+    SessionStartResponse,
+    TurnResponse,
+)
 from .services import llm_service
 
 MAX_TURNS = 15
@@ -165,6 +173,118 @@ def _fallback_report(session: models.SimSession) -> dict:
     }
 
 
+def _scenario_label(scenario_type: str) -> str:
+    scenario = SCENARIOS.get(scenario_type, {})
+    return str(scenario.get("label", scenario_type.replace("_", " ").title()))
+
+
+def _focus_area_from_cases(cases: list[LearnerCaseSummary]) -> str:
+    if not cases:
+        return "Protocol"
+    latest = cases[0]
+    lowest_key = min(
+        latest.criteria,
+        key=lambda key: latest.criteria.get(key, 25),
+        default="protocol_adherence",
+    )
+    return {
+        "protocol_adherence": "Protocol",
+        "diagnostic_accuracy": "Diagnosis",
+        "patient_safety": "Safety",
+        "pharmacology_precision": "Pharmacology",
+    }.get(lowest_key, "Protocol")
+
+
+def _learner_recommendations(cases: list[LearnerCaseSummary], average_score: int | None) -> list[str]:
+    if not cases:
+        return [
+            "Complete your first simulation to unlock adaptive recommendations.",
+            "Start with Guided Mode, then repeat the same case in Expert Mode.",
+            "Recommended first case: Acute Coronary Syndrome (STEMI).",
+        ]
+
+    latest = cases[0]
+    latest_name = _scenario_label(latest.scenario)
+    focus_area = _focus_area_from_cases(cases)
+    recommendations = []
+
+    if latest.score >= 90:
+        recommendations.append(
+            f"Advance to Expert Mode in {latest_name} or choose a different emergency case."
+        )
+    elif focus_area == "Pharmacology":
+        recommendations.append(
+            f"Repeat {latest_name} and focus on medication timing, dosing, and contraindications."
+        )
+    elif focus_area == "Diagnosis":
+        recommendations.append(
+            f"Practice diagnostic confirmation in {latest_name}: order the decisive test early."
+        )
+    elif focus_area == "Safety":
+        recommendations.append(
+            "Prioritize airway, oxygenation, circulation, and contraindication checks in the next case."
+        )
+    else:
+        recommendations.append(
+            f"Repeat {latest_name} and complete the definitive protocol bundle before ending the case."
+        )
+
+    if average_score is not None and average_score < 75:
+        recommendations.append("Use Guided Mode for one more run, then compare your timeline against the feedback.")
+    else:
+        recommendations.append("Move one frequent case into Expert Mode to remove quick action support.")
+
+    if any(term in latest.errors.lower() for term in ("cath", "pci", "reperfusion", "p2y12", "heparin")):
+        recommendations.append("STEMI focus: activate reperfusion early and complete antiplatelet plus anticoagulation steps.")
+    else:
+        recommendations.append("Next challenge: choose a different specialty case to test transfer of judgment.")
+
+    return recommendations[:3]
+
+
+def _build_learner_profile_response(learner: models.LearnerProfile, db: DBSession) -> LearnerProfileResponse:
+    sessions = (
+        db.query(models.SimSession)
+        .filter_by(learner_id=learner.id)
+        .order_by(models.SimSession.created_at.desc())
+        .all()
+    )
+    case_summaries: list[LearnerCaseSummary] = []
+
+    for session in sessions:
+        if not session.report:
+            continue
+        report = session.report
+        case_summaries.append(
+            LearnerCaseSummary(
+                session_id=session.id,
+                scenario=session.scenario_type,
+                score=int(report.score or 0),
+                badge=report.status_badge or "COMPLETED",
+                criteria=_criteria_from_report(report),
+                errors=report.errors or "",
+                suggestions=report.suggestions or "",
+                completed_at=(report.created_at or session.created_at).isoformat(),
+            )
+        )
+
+    average_score = None
+    if case_summaries:
+        average_score = round(sum(case.score for case in case_summaries) / len(case_summaries))
+
+    recent_cases = case_summaries[:8]
+    return LearnerProfileResponse(
+        learner_id=learner.id,
+        display_name=learner.display_name,
+        training_track=learner.training_track or "Emergency Medicine",
+        completed_cases=len(case_summaries),
+        average_score=average_score,
+        focus_area=_focus_area_from_cases(recent_cases),
+        recommendations=_learner_recommendations(recent_cases, average_score),
+        recent_cases=recent_cases,
+    )
+
+
 def _fallback_turn(action: ActionRequest) -> dict:
     current_hr = action.current_hr or 110
     current_spo2 = action.current_spo2 or 92
@@ -237,16 +357,53 @@ def list_scenarios():
     }
 
 
+@app.post("/learners", response_model=LearnerProfileResponse)
+def upsert_learner(payload: LearnerLoginRequest, db: DBSession = Depends(get_db)):
+    learner = None
+    if payload.learner_id:
+        learner = db.query(models.LearnerProfile).filter_by(id=payload.learner_id).first()
+
+    if learner is None:
+        learner = models.LearnerProfile(
+            display_name=payload.display_name.strip() or "Dr. On-Duty Resident",
+            training_track=payload.training_track.strip() or "Emergency Medicine",
+        )
+        db.add(learner)
+    else:
+        learner.display_name = payload.display_name.strip() or learner.display_name
+        learner.training_track = payload.training_track.strip() or learner.training_track
+
+    db.commit()
+    db.refresh(learner)
+    return _build_learner_profile_response(learner, db)
+
+
+@app.get("/learners/{learner_id}/profile", response_model=LearnerProfileResponse)
+def get_learner_profile(learner_id: str, db: DBSession = Depends(get_db)):
+    learner = db.query(models.LearnerProfile).filter_by(id=learner_id).first()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner profile not found")
+    return _build_learner_profile_response(learner, db)
+
+
 @app.post("/session/start", response_model=SessionStartResponse)
-def start_session(scenario_type: str, db: DBSession = Depends(get_db)):
+def start_session(scenario_type: str, learner_id: str | None = None, db: DBSession = Depends(get_db)):
     try:
         scenario = get_scenario(scenario_type)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    learner = None
+    if learner_id:
+        learner = db.query(models.LearnerProfile).filter_by(id=learner_id).first()
+
     result = llm_service.start_scenario(scenario["prompt"])
 
-    session = models.SimSession(scenario_type=scenario_type, turn_count=1)
+    session = models.SimSession(
+        scenario_type=scenario_type,
+        learner_id=learner.id if learner else None,
+        turn_count=1,
+    )
     db.add(session)
     db.flush()
 

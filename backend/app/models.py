@@ -9,15 +9,29 @@ def gen_id() -> str:
     return str(uuid.uuid4())
 
 
+class LearnerProfile(Base):
+    __tablename__ = "learner_profiles"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    display_name = Column(String, nullable=False)
+    training_track = Column(String, default="Emergency Medicine")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    sessions = relationship("SimSession", back_populates="learner")
+
+
 class SimSession(Base):
     __tablename__ = "sim_sessions"
 
     id = Column(String, primary_key=True, default=gen_id)
+    learner_id = Column(String, ForeignKey("learner_profiles.id"), nullable=True, index=True)
     scenario_type = Column(String, nullable=False)
     status = Column(String, default="active")  # active | finished
     turn_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    learner = relationship("LearnerProfile", back_populates="sessions")
     vitals = relationship("VitalState", back_populates="session", order_by="VitalState.id")
     logs = relationship("InteractionLog", back_populates="session", order_by="InteractionLog.id")
     report = relationship("ReportResult", back_populates="session", uselist=False)

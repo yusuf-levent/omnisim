@@ -30,7 +30,7 @@ let sessionStartTime = null;
 let audioCtx = null;
 let isAudioEnabled = true;
 let cachedReportData = null;
-const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v1";
+const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v2";
 const MAX_PROFILE_HISTORY = 8;
 let memoryLearnerProfile = null;
 
@@ -685,7 +685,10 @@ async function startSession(scenarioType) {
   initAudioContext();
 
   try {
-    const res = await fetchWithTimeout(apiUrl(`/session/start?scenario_type=${scenarioType}`), {
+    const learnerId = loadLearnerProfile().learnerId;
+    const query = new URLSearchParams({ scenario_type: scenarioType });
+    if (learnerId) query.set("learner_id", learnerId);
+    const res = await fetchWithTimeout(apiUrl(`/session/start?${query.toString()}`), {
       method: "POST",
     });
     if (!res.ok) throw new Error("Could not connect to backend server.");
@@ -889,18 +892,65 @@ function buildOutcomeCopy(report) {
 
 function defaultLearnerProfile() {
   return {
-    learnerName: "Dr. On-Duty Resident",
+    isSignedIn: false,
+    learnerId: null,
+    learnerName: "",
+    learnerTrack: "Emergency Medicine",
+    profileSource: "local",
     completedCases: [],
   };
+}
+
+function normalizeLearnerProfile(profile) {
+  const base = defaultLearnerProfile();
+  if (!profile || typeof profile !== "object") return base;
+  return {
+    ...base,
+    ...profile,
+    learnerName: String(profile.learnerName || "").trim(),
+    learnerTrack: String(profile.learnerTrack || profile.learnerRole || base.learnerTrack).trim(),
+    learnerId: profile.learnerId || profile.learner_id || null,
+    profileSource: profile.profileSource || base.profileSource,
+    completedCases: Array.isArray(profile.completedCases) ? profile.completedCases : [],
+    isSignedIn: Boolean(profile.isSignedIn && String(profile.learnerName || "").trim()),
+  };
+}
+
+function profileFromApi(payload, fallback = loadLearnerProfile()) {
+  const remoteCases = Array.isArray(payload?.recent_cases) ? payload.recent_cases : [];
+  return normalizeLearnerProfile({
+    ...fallback,
+    isSignedIn: true,
+    learnerId: payload?.learner_id || fallback.learnerId,
+    learnerName: payload?.display_name || fallback.learnerName,
+    learnerTrack: payload?.training_track || fallback.learnerTrack,
+    profileSource: "database",
+    completedCases: remoteCases.map((item) => ({
+      sessionId: item.session_id,
+      scenario: item.scenario,
+      score: Number(item.score || 0),
+      badge: String(item.badge || "COMPLETED"),
+      criteria: item.criteria || {},
+      errors: String(item.errors || ""),
+      suggestions: String(item.suggestions || ""),
+      completedAt: item.completed_at,
+    })),
+    remoteSummary: {
+      completedCases: Number(payload?.completed_cases || remoteCases.length || 0),
+      averageScore: payload?.average_score ?? null,
+      focusArea: payload?.focus_area || null,
+      recommendations: Array.isArray(payload?.recommendations) ? payload.recommendations : null,
+    },
+  });
 }
 
 function loadLearnerProfile() {
   if (memoryLearnerProfile) return memoryLearnerProfile;
   try {
     const stored = JSON.parse(window.localStorage?.getItem(LEARNER_PROFILE_KEY) || "null");
-    if (stored && Array.isArray(stored.completedCases)) {
-      memoryLearnerProfile = stored;
-      return stored;
+    if (stored) {
+      memoryLearnerProfile = normalizeLearnerProfile(stored);
+      return memoryLearnerProfile;
     }
   } catch (_) {}
   memoryLearnerProfile = defaultLearnerProfile();
@@ -912,6 +962,83 @@ function saveLearnerProfile(profile) {
   try {
     window.localStorage?.setItem(LEARNER_PROFILE_KEY, JSON.stringify(profile));
   } catch (_) {}
+}
+
+function refreshLearnerIdentityUI() {
+  const profile = loadLearnerProfile();
+  const navName = document.getElementById("nav-learner-name");
+  const navRole = document.getElementById("nav-learner-role");
+  const profileName = document.getElementById("profile-learner-name");
+  const profileTrack = document.getElementById("profile-learner-track");
+
+  if (navName) navName.textContent = signedInLearnerName(profile);
+  if (navRole) navRole.textContent = signedInLearnerTrack(profile);
+  if (profileName) profileName.textContent = signedInLearnerName(profile);
+  if (profileTrack) profileTrack.textContent = signedInLearnerTrack(profile);
+}
+
+function openLearnerLogin() {
+  const profile = loadLearnerProfile();
+  const nameInput = document.getElementById("learner-name-input");
+  const trackSelect = document.getElementById("learner-track-select");
+
+  if (nameInput && profile.learnerName) nameInput.value = profile.learnerName;
+  if (trackSelect && profile.learnerTrack) trackSelect.value = profile.learnerTrack;
+
+  document.getElementById("learner-login-modal")?.classList.add("active");
+  setTimeout(() => nameInput?.focus(), 50);
+}
+
+function closeLearnerLogin() {
+  document.getElementById("learner-login-modal")?.classList.remove("active");
+}
+
+async function handleLearnerLogin(event) {
+  event.preventDefault();
+  const nameInput = document.getElementById("learner-name-input");
+  const trackSelect = document.getElementById("learner-track-select");
+  const learnerName = String(nameInput?.value || "").trim() || "Dr. On-Duty Resident";
+  const learnerTrack = String(trackSelect?.value || "Emergency Medicine").trim();
+  const previous = loadLearnerProfile();
+
+  const localProfile = {
+    ...previous,
+    isSignedIn: true,
+    learnerName,
+    learnerTrack,
+  };
+
+  try {
+    const res = await fetchWithTimeout(apiUrl("/learners"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        learner_id: previous.learnerId,
+        display_name: learnerName,
+        training_track: learnerTrack,
+      }),
+    });
+    if (!res.ok) throw new Error("Learner profile API failed");
+    const remoteProfile = profileFromApi(await res.json(), localProfile);
+    saveLearnerProfile(remoteProfile);
+  } catch (err) {
+    console.warn("Learner profile will use local storage fallback:", err);
+    saveLearnerProfile({ ...localProfile, profileSource: "local" });
+  }
+
+  refreshLearnerIdentityUI();
+  renderLearnerProfile();
+  closeLearnerLogin();
+}
+
+function signedInLearnerName(profile = loadLearnerProfile()) {
+  return profile.isSignedIn ? profile.learnerName : "Guest Learner";
+}
+
+function signedInLearnerTrack(profile = loadLearnerProfile()) {
+  if (!profile.isSignedIn) return "Not signed in";
+  const sourceLabel = profile.profileSource === "database" ? "Database synced" : "Local session";
+  return `${profile.learnerTrack} · ${sourceLabel}`;
 }
 
 function formatScenarioName(key) {
@@ -960,6 +1087,10 @@ function recommendationForFocus(focusKey, latestCase) {
 }
 
 function buildLearnerRecommendations(profile) {
+  if (Array.isArray(profile.remoteSummary?.recommendations)) {
+    return profile.remoteSummary.recommendations.slice(0, 3);
+  }
+
   const cases = profile.completedCases || [];
   if (!cases.length) {
     return [
@@ -1012,6 +1143,23 @@ function updateLearnerProfile(report) {
   profile.completedCases = [caseRecord, ...previousCases].slice(0, MAX_PROFILE_HISTORY);
   saveLearnerProfile(profile);
   renderLearnerProfile();
+  refreshLearnerProfileFromServer();
+}
+
+async function refreshLearnerProfileFromServer() {
+  const profile = loadLearnerProfile();
+  if (!profile.isSignedIn || !profile.learnerId) return;
+
+  try {
+    const res = await fetchWithTimeout(apiUrl(`/learners/${profile.learnerId}/profile`), {
+      method: "GET",
+    });
+    if (!res.ok) throw new Error("Learner profile refresh failed");
+    saveLearnerProfile(profileFromApi(await res.json(), profile));
+    renderLearnerProfile();
+  } catch (err) {
+    console.warn("Learner profile refresh used local fallback:", err);
+  }
 }
 
 function renderLearnerProfile() {
@@ -1023,14 +1171,18 @@ function renderLearnerProfile() {
   const recContainer = document.getElementById("profile-recommendations");
   const historyContainer = document.getElementById("profile-history");
 
-  const avgScore = cases.length
-    ? Math.round(cases.reduce((sum, item) => sum + Number(item.score || 0), 0) / cases.length)
-    : null;
+  const avgScore = profile.remoteSummary?.averageScore ?? (
+    cases.length
+      ? Math.round(cases.reduce((sum, item) => sum + Number(item.score || 0), 0) / cases.length)
+      : null
+  );
   const focusKey = cases.length ? lowestCriteriaKey(cases[0].criteria || {}) : "protocol_adherence";
+  const focusLabel = profile.remoteSummary?.focusArea || criteriaLabel(focusKey);
 
-  if (caseCountEl) caseCountEl.textContent = cases.length;
+  refreshLearnerIdentityUI();
+  if (caseCountEl) caseCountEl.textContent = profile.remoteSummary?.completedCases ?? cases.length;
   if (avgScoreEl) avgScoreEl.textContent = avgScore === null ? "--" : `${avgScore}/100`;
-  if (focusEl) focusEl.textContent = criteriaLabel(focusKey);
+  if (focusEl) focusEl.textContent = focusLabel;
 
   if (recContainer) {
     recContainer.textContent = "";
@@ -1071,12 +1223,24 @@ function renderLearnerProfile() {
 }
 
 function openLearnerProfile() {
+  if (!loadLearnerProfile().isSignedIn) {
+    openLearnerLogin();
+    return;
+  }
   renderLearnerProfile();
   document.getElementById("learner-profile-modal")?.classList.add("active");
 }
 
 function closeLearnerProfile() {
   document.getElementById("learner-profile-modal")?.classList.remove("active");
+}
+
+function initializeLearnerSession() {
+  refreshLearnerIdentityUI();
+  renderLearnerProfile();
+  if (!loadLearnerProfile().isSignedIn) {
+    openLearnerLogin();
+  }
 }
 
 // --- 6. Turn Rendering & DDx Updates ---
@@ -1671,5 +1835,5 @@ function stopECGAnimation() {
   }
 }
 
-renderLearnerProfile();
+initializeLearnerSession();
 loadScenarios();

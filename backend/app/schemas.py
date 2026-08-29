@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 
 class ActionRequest(BaseModel):
@@ -44,3 +44,31 @@ class SessionStartResponse(BaseModel):
     session_id: str
     scenario_type: str
     turn: TurnResponse
+
+
+class LearnerLoginRequest(BaseModel):
+    learner_id: Optional[str] = None
+    display_name: str
+    training_track: str = "Emergency Medicine"
+
+
+class LearnerCaseSummary(BaseModel):
+    session_id: str
+    scenario: str
+    score: int
+    badge: str
+    criteria: Dict[str, int]
+    errors: str
+    suggestions: str
+    completed_at: str
+
+
+class LearnerProfileResponse(BaseModel):
+    learner_id: str
+    display_name: str
+    training_track: str
+    completed_cases: int
+    average_score: Optional[int]
+    focus_area: str
+    recommendations: List[str]
+    recent_cases: List[LearnerCaseSummary]

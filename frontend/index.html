@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OmniSim AI - Interactive Clinical Decision Simulator</title>
-  <link rel="stylesheet" href="assets/css/style.css?v=20260829-01" />
+  <link rel="stylesheet" href="assets/css/style.css?v=20260829-02" />
 </head>
 <body>
   <div id="app">
@@ -31,8 +31,8 @@
         <div class="user-profile">
           <div class="user-avatar">👨‍⚕️</div>
           <div class="user-info">
-            <span class="user-name">Dr. On-Duty Resident</span>
-            <span class="user-role">Emergency Department</span>
+            <span id="nav-learner-name" class="user-name">Guest Learner</span>
+            <span id="nav-learner-role" class="user-role">Not signed in</span>
           </div>
         </div>
       </div>
@@ -252,12 +252,38 @@
       </div>
     </section>
 
-    <!-- 4. EMS Arrival Pop-up Modal -->
+    <!-- 4. Local Learner Sign-in Modal -->
+    <div id="learner-login-modal" class="modal-overlay">
+      <div class="modal-card login-card">
+        <div class="modal-badge">🧠 OMNISIM LEARNER SESSION</div>
+        <h2>Start Personalized Training</h2>
+        <p class="modal-text">
+          Create a local learner session so OmniSim can attach simulation reports to your profile and update recommendations after each case.
+        </p>
+        <form id="learner-login-form" class="login-form" onsubmit="handleLearnerLogin(event)">
+          <label for="learner-name-input">Display Name</label>
+          <input id="learner-name-input" type="text" value="Dr. On-Duty Resident" maxlength="48" autocomplete="name" required />
+
+          <label for="learner-track-select">Training Track</label>
+          <select id="learner-track-select">
+            <option value="Emergency Medicine">Emergency Medicine</option>
+            <option value="Courtroom Practice">Courtroom Practice</option>
+            <option value="Crisis Management">Crisis Management</option>
+            <option value="Interview Training">Interview Training</option>
+          </select>
+
+          <button class="btn-modal" type="submit">START LEARNING PROFILE</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 5. Learner Profile Modal -->
     <div id="learner-profile-modal" class="modal-overlay">
       <div class="modal-card profile-card">
         <button class="modal-close-x" type="button" onclick="closeLearnerProfile()" aria-label="Close learner profile">×</button>
         <div class="modal-badge">🧠 PERSONALIZED LEARNING PROFILE</div>
-        <h2>Dr. On-Duty Resident</h2>
+        <h2 id="profile-learner-name">Guest Learner</h2>
+        <p id="profile-learner-track" class="profile-track">Not signed in</p>
         <div class="profile-stats">
           <div>
             <span>Cases</span>
@@ -283,7 +309,7 @@
       </div>
     </div>
 
-    <!-- 5. EMS Arrival Pop-up Modal -->
+    <!-- 6. EMS Arrival Pop-up Modal -->
     <div id="patient-modal" class="modal-overlay">
       <div class="modal-card">
         <div class="modal-badge">🚨 EMS INCOMING TRAUMA/MEDICAL NOTIFICATION</div>
@@ -301,7 +327,7 @@
       </div>
     </div>
 
-    <!-- 6. Feature: Dynamic Diagnostics & Lab Results Modal -->
+    <!-- 7. Feature: Dynamic Diagnostics & Lab Results Modal -->
     <div id="lab-modal" class="modal-overlay">
       <div class="modal-card wide">
         <div class="modal-badge">🔬 STAT EMERGENCY DIAGNOSTICS</div>
@@ -311,7 +337,7 @@
       </div>
     </div>
 
-    <!-- 7. Feature: Difficulty Selection Modal -->
+    <!-- 8. Feature: Difficulty Selection Modal -->
     <div id="difficulty-modal" class="modal-overlay">
       <div class="modal-card difficulty-card">
         <button class="modal-close-x" type="button" onclick="closeDifficultyModal()" aria-label="Close difficulty selection">×</button>
@@ -340,7 +366,7 @@
       </div>
     </div>
 
-    <!-- 8. Feature: Manual Case Conclusion Confirmation Modal -->
+    <!-- 9. Feature: Manual Case Conclusion Confirmation Modal -->
     <div id="abort-confirm-modal" class="modal-overlay">
       <div class="modal-card confirm-card">
         <div class="modal-badge">⚠️ CASE TERMINATION REQUEST</div>
@@ -371,7 +397,7 @@
       </div>
     </div>
 
-    <!-- 9. Feature: Clinical Outcome Pop-up Modal -->
+    <!-- 10. Feature: Clinical Outcome Pop-up Modal -->
     <div id="outcome-modal" class="modal-overlay">
       <div class="modal-card">
         <div id="outcome-badge" class="modal-badge">🚨 CLINICAL OUTCOME NOTICE</div>
@@ -395,7 +421,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260829-01"></script>
-  <script src="assets/js/app.js?v=20260829-01"></script>
+  <script src="assets/js/config.js?v=20260829-02"></script>
+  <script src="assets/js/app.js?v=20260829-02"></script>
 </body>
 </html>
