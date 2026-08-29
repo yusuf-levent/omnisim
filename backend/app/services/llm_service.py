@@ -83,6 +83,7 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     Do NOT use Turkish under any circumstances.
     Use the GROUND-TRUTH ACTION AUDIT TRAIL in the conversation as the authoritative source of physician actions.
     Never criticize the physician for omitting an intervention that appears in that audit trail.
+    If the case is STEMI/ACS, do not describe the performance as definitive stabilization unless reperfusion care was activated (Cath Lab/primary PCI or equivalent), and credit P2Y12 loading plus anticoagulation when present.
 
     SCORING STANDARDS:
     1. EXCELLENT STABILIZATION & PROTOCOL ADHERENCE (90-100 / OUTSTANDING):

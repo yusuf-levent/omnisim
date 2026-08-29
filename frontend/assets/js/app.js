@@ -151,6 +151,9 @@ const QUICK_ACTIONS = {
     { label: "🫁 High-Flow O2", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
     { label: "📈 12-Lead ECG", cmd: "Perform immediate 12-Lead ECG and monitor rhythm" },
     { label: "💊 Aspirin 325mg", cmd: "Administer 325mg chewable Aspirin PO" },
+    { label: "💊 P2Y12 Load", cmd: "Administer P2Y12 inhibitor loading dose for STEMI (Ticagrelor 180mg PO or Clopidogrel 600mg PO)" },
+    { label: "💉 IV Heparin", cmd: "Administer Unfractionated Heparin IV bolus per STEMI protocol and bleeding risk" },
+    { label: "🏥 Activate Cath Lab", cmd: "Activate Cardiac Catheterization Lab immediately for primary PCI reperfusion" },
     { label: "💉 Sublingual NTG", cmd: "Administer Sublingual Nitroglycerin 0.4mg" },
     { label: "🧪 Stat Cardiac Labs", cmd: "Order Stat Troponin-I, CK-MB, and Arterial Blood Gas" },
     { label: "⚡ Defib 200J", cmd: "Prepare Defibrillator and charge to 200J Biphasic", warning: true },
@@ -838,6 +841,49 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
+function buildOutcomeCopy(report) {
+  const badge = String(report?.status_badge || "");
+  const errors = String(report?.errors || "");
+  const score = Number(report?.score || 0);
+  const hasFailure = /fail|arrest|critical/i.test(badge);
+  const hasDefinitiveCareGap = /cath|pci|reperfusion|p2y12|heparin|anticoag/i.test(errors);
+
+  if (hasFailure || score < 50) {
+    return {
+      successAudio: false,
+      color: "#ef4444",
+      badge: "🚨 CRITICAL FAILURE / CARDIAC ARREST",
+      icon: "⚡📉",
+      title: "Patient Decompensated",
+      desc:
+        errors ||
+        "Critical stabilization steps were missed or delayed, resulting in severe deterioration.",
+    };
+  }
+
+  if (score < 80 || hasDefinitiveCareGap) {
+    return {
+      successAudio: true,
+      color: "#f59e0b",
+      badge: "⚠️ PARTIAL STABILIZATION - DEFINITIVE CARE NEEDED",
+      icon: "🫀📋",
+      title: "Initial Stabilization Achieved",
+      desc:
+        "Initial bedside interventions improved the immediate risk, but the case still requires definitive protocol completion. Review the full evaluation for missed reperfusion or medication steps.",
+    };
+  }
+
+  return {
+    successAudio: true,
+    color: "#10b981",
+    badge: "✅ CLINICAL STABILIZATION ACHIEVED",
+    icon: "🫀✨",
+    title: "Patient Successfully Stabilized",
+    desc:
+      "Timely and protocol-adherent interventions addressed immediate instability and definitive care was appropriately activated.",
+  };
+}
+
 // --- 6. Turn Rendering & DDx Updates ---
 let lastSystemNote = "";
 
@@ -1148,31 +1194,16 @@ async function finishSession() {
     if (!res.ok) throw new Error("Could not fetch evaluation report.");
     cachedReportData = await res.json();
 
-    const isSuccess =
-      cachedReportData.score >= 60 &&
-      !cachedReportData.status_badge.includes("FAIL") &&
-      !cachedReportData.status_badge.includes("ARREST");
-
-    if (isSuccess) {
-      modalBadge.style.color = "#10b981";
-      modalBadge.textContent = "✅ CLINICAL STABILIZATION ACHIEVED";
-      modalIcon.textContent = "🫀✨";
-      modalTitle.textContent = "Patient Successfully Stabilized";
-      modalDesc.textContent =
-        "Timely and protocol-adherent interventions effectively reversed acute decompensation. Patient stabilized and transferred to the ICU / Cath Lab.";
-    } else {
-      modalBadge.style.color = "#ef4444";
-      modalBadge.textContent = "🚨 CRITICAL FAILURE / CARDIAC ARREST";
-      modalIcon.textContent = "⚡📉";
-      modalTitle.textContent = "Patient Entered Asystole / VF Arrest";
-      modalDesc.textContent =
-        cachedReportData.errors ||
-        "Prolonged ischemia and absence of critical stabilization orders resulted in fatal cardiovascular collapse.";
-    }
+    const outcome = buildOutcomeCopy(cachedReportData);
+    modalBadge.style.color = outcome.color;
+    modalBadge.textContent = outcome.badge;
+    modalIcon.textContent = outcome.icon;
+    modalTitle.textContent = outcome.title;
+    modalDesc.textContent = outcome.desc;
 
     if (modalLoading) modalLoading.style.display = "none";
     if (proceedBtn) proceedBtn.style.display = "block";
-    playOutcomeAudio(isSuccess);
+    playOutcomeAudio(outcome.successAudio);
   } catch (err) {
     if (modalBadge) {
       modalBadge.style.color = "#ef4444";
