@@ -10,8 +10,7 @@
 
 *Turning Large Language Models from passive chatbots into active, time-pressured medical training environments.*
 
-<img src="https://via.placeholder.com/1200x600/0f172a/38bdf8?text=OmniSim+AI+Dashboard+Screenshot" alt="OmniSim AI Dashboard" width="100%">
-*(Replace this placeholder with an actual screenshot of the simulation dashboard)*
+![alt text](image.png)
 
 </div>
 
@@ -30,7 +29,7 @@ OmniSim AI proves that LLMs can function as strict, objective evaluators and lon
 ## ✨ Core Features
 
 ### ⏱️ Dynamic Bedside Simulation
-- **20+ Interactive Clinical Scenarios:** Ranging from Acute Coronary Syndrome (STEMI) and Massive Pulmonary Embolism to Pediatric SVT and Status Asthmaticus.
+- **20 Interactive Clinical Scenarios:** Ranging from Acute Coronary Syndrome (STEMI) and Massive Pulmonary Embolism to Pediatric SVT and Status Asthmaticus.
 - **Real-Time Telemetry & Vitals:** A custom-built Web Audio API integration generates authentic ECG monitor beeps that pitch-shift based on the patient's SpO2 levels. Vitals dynamically respond to the user's pharmacological interventions.
 - **Triage Code Red Engine:** A countdown timer forces decisions under pressure. Delayed interventions accelerate patient deterioration, mimicking real-life physiological collapse.
 
