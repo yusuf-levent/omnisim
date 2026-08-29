@@ -45,7 +45,6 @@ class LearnerLoginRequest(BaseModel):
     username: str
     email: str
     password: str
-    training_track: str = "Emergency Medicine"
 
 class ScenarioRecommendation(BaseModel):
     scenario_id: str
@@ -69,11 +68,10 @@ class LearnerProfileResponse(BaseModel):
     learner_id: str
     username: str
     display_name: str
-    training_track: str
     completed_cases: int
     total_available_cases: int = 20
     average_score: Optional[int]
     focus_area: str
     recommendations: List[ScenarioRecommendation]
-    study_topics: List[str]  # YENİ: Tıbbi Çalışma Konuları
+    study_topics: List[str]
     recent_cases: List[LearnerCaseSummary]

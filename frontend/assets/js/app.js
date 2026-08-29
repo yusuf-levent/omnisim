@@ -9,9 +9,10 @@ let timeLeft = 30;
 const TURN_DURATION = 30;
 let gameLoopInterval = null, isRequestInProgress = false, hasBreachedThreshold = false, isEndingSession = false;
 let selectedDifficulty = "easy", pendingScenarioKey = null, pendingSessionReady = false;
+let isStartingSession = false;
 let sessionActionLogs = [], sessionStartTime = null;
 let audioCtx = null, isAudioEnabled = true, cachedReportData = null;
-const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v5";
+const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v7";
 const MAX_PROFILE_HISTORY = 8;
 let memoryLearnerProfile = null;
 
@@ -365,7 +366,6 @@ const screens = {
   report: document.getElementById("screen-report"),
 };
 
-// GÜNCELLENDİ: Case İçinde Profil Butonunu Gizle
 function showScreen(name) {
   Object.values(screens).forEach((el) => el.classList.remove("active"));
   screens[name].classList.add("active");
@@ -655,7 +655,7 @@ function drawRadarChart(criteria = {}) {
 // 4. KULLANICI & PROFIL SİSTEMİ
 // =========================================================================
 function defaultLearnerProfile() {
-  return { isSignedIn: false, username: null, learnerId: null, learnerName: "", learnerTrack: "Emergency Medicine", profileSource: "local", completedCases: [] };
+  return { isSignedIn: false, username: null, learnerId: null, learnerName: "", profileSource: "local", completedCases: [] };
 }
 
 function normalizeLearnerProfile(profile) {
@@ -665,7 +665,6 @@ function normalizeLearnerProfile(profile) {
     ...base, ...profile,
     username: String(profile.username || "").trim(),
     learnerName: String(profile.learnerName || "").trim(),
-    learnerTrack: String(profile.learnerTrack || profile.learnerRole || base.learnerTrack).trim(),
     learnerId: profile.learnerId || profile.learner_id || null,
     profileSource: profile.profileSource || base.profileSource,
     completedCases: Array.isArray(profile.completedCases) ? profile.completedCases : [],
@@ -681,7 +680,6 @@ function profileFromApi(payload, fallback = loadLearnerProfile()) {
     username: payload?.username || fallback.username,
     learnerId: payload?.learner_id || fallback.learnerId,
     learnerName: payload?.display_name || fallback.learnerName,
-    learnerTrack: payload?.training_track || fallback.learnerTrack,
     profileSource: "database",
     completedCases: remoteCases.map((item) => ({
       sessionId: item.session_id, scenario: item.scenario, scenarioTitle: item.scenario_title,
@@ -719,7 +717,7 @@ function refreshLearnerIdentityUI() {
   const navName = document.getElementById("nav-learner-name"), navRole = document.getElementById("nav-learner-role");
   const profileName = document.getElementById("profile-learner-name"), profileTrack = document.getElementById("profile-learner-track");
   const dName = profile.isSignedIn ? profile.learnerName : "Guest Learner";
-  const dTrack = profile.isSignedIn ? `${profile.learnerTrack} · ${profile.profileSource === "database" ? "Database" : "Local"}` : "Not signed in";
+  const dTrack = profile.isSignedIn ? `Emergency Medicine · ${profile.profileSource === "database" ? "Database" : "Local"}` : "Not signed in";
   
   if (navName) navName.textContent = dName;
   if (navRole) navRole.textContent = dTrack;
@@ -729,9 +727,8 @@ function refreshLearnerIdentityUI() {
 
 function openLearnerLogin() {
   const profile = loadLearnerProfile();
-  const userInp = document.getElementById("learner-username-input"), trackSel = document.getElementById("learner-track-select");
+  const userInp = document.getElementById("learner-username-input");
   if (userInp && profile.username) userInp.value = profile.username;
-  if (trackSel && profile.learnerTrack) trackSel.value = profile.learnerTrack;
   document.getElementById("learner-login-modal")?.classList.add("active");
   setTimeout(() => userInp?.focus(), 50);
 }
@@ -744,52 +741,64 @@ function logoutLearner() {
   refreshLearnerIdentityUI();
   closeLearnerProfile();
 }
-
 async function handleLearnerLogin(event) {
   event.preventDefault();
   const emailInp = document.getElementById("learner-email-input");
   const userInp = document.getElementById("learner-username-input");
   const passInp = document.getElementById("learner-password-input");
   const passConf = document.getElementById("learner-password-confirm");
-  const trackSel = document.getElementById("learner-track-select");
+  const errorMsg = document.getElementById("login-error-msg");
+  const submitBtn = document.getElementById("login-submit-btn");
+  
+  errorMsg.style.display = "none"; // Önceki hataları gizle
   
   if (passInp.value !== passConf.value) {
-    alert("Passwords do not match!");
+    errorMsg.textContent = "Passwords do not match!";
+    errorMsg.style.display = "block";
     return;
   }
 
   const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
   if (!passRegex.test(passInp.value)) {
-    alert("Password must contain at least 1 uppercase, 1 lowercase, and 1 number.");
+    errorMsg.textContent = "Password must contain at least 1 uppercase, 1 lowercase, and 1 number.";
+    errorMsg.style.display = "block";
     return;
   }
 
   const username = String(userInp.value).trim().toLowerCase();
   const email = String(emailInp.value).trim().toLowerCase();
   const password = passInp.value;
-  const learnerTrack = String(trackSel.value || "Emergency Medicine").trim();
-  const localProfile = { ...loadLearnerProfile(), isSignedIn: true, username, learnerName: username, learnerTrack };
+  const localProfile = { ...loadLearnerProfile(), isSignedIn: true, username, learnerName: username };
+
+  if(submitBtn) { submitBtn.textContent = "PLEASE WAIT..."; submitBtn.disabled = true; }
 
   try {
     const res = await fetchWithTimeout(apiUrl("/learners"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password, training_track: learnerTrack }),
+      body: JSON.stringify({ username, email, password }),
     });
+    
     if (!res.ok) {
-      if (res.status === 401) throw new Error("Incorrect Password.");
-      throw new Error("API failed");
+      if (res.status === 401) throw new Error("Incorrect password or username.");
+      throw new Error("Backend connection failed.");
     }
+    
     saveLearnerProfile(profileFromApi(await res.json(), localProfile));
     passInp.value = ""; passConf.value = "";
+    
   } catch (err) { 
-    alert(err.message);
+    errorMsg.textContent = err.message;
+    errorMsg.style.display = "block";
+    if(submitBtn) { submitBtn.textContent = "LOGIN / REGISTER"; submitBtn.disabled = false; }
     return;
   }
 
-  refreshLearnerIdentityUI(); renderLearnerProfile(); closeLearnerLogin();
+  if(submitBtn) { submitBtn.textContent = "LOGIN / REGISTER"; submitBtn.disabled = false; }
+  refreshLearnerIdentityUI(); 
+  renderLearnerProfile(); 
+  closeLearnerLogin();
   if (window.pendingClaimSessionId) await processSessionClaim(window.pendingClaimSessionId, username);
 }
-
 function promptClaimSession() {
   window.pendingClaimSessionId = currentSessionId;
   openLearnerLogin();
@@ -965,10 +974,25 @@ function setInteractionsDisabled(disabled) {
   document.getElementById("quick-action-container")?.classList.toggle("is-disabled", disabled);
 }
 
+// GÜNCELLENDİ: Çift Tıklama Engeli ve "Generating Case" Loading Animasyonu Eklendi
 async function startSession(scenarioType) {
+  if (isStartingSession) return;
+  isStartingSession = true;
+  
   activeScenarioKey = scenarioType || "acute_coronary_syndrome";
   hasBreachedThreshold = false; isRequestInProgress = false; isEndingSession = false; pendingSessionReady = false;
   stopGameLoop(); initAudioContext();
+
+  const diffModal = document.getElementById("difficulty-modal");
+  const diffLoading = document.getElementById("diff-loading");
+  const diffContent = document.getElementById("diff-content");
+
+  if (diffModal && diffLoading && diffContent) {
+    diffModal.classList.add("active");
+    diffLoading.style.display = "flex";
+    diffContent.style.display = "none";
+  }
+
   try {
     const learnerId = loadLearnerProfile().learnerId;
     const query = new URLSearchParams({ scenario_type: scenarioType });
@@ -995,8 +1019,19 @@ async function startSession(scenarioType) {
     document.getElementById("difficulty-tansiyon").textContent = turn.blood_pressure;
 
     renderLabModal(); logTimelineEvent("EMS Admission", `Patient admitted with ${turn.primary_diagnosis}`);
-    renderTurn(turn, null, false); pendingSessionReady = true; document.getElementById("difficulty-modal").classList.add("active");
-  } catch (err) { alert("Initialization Error: " + err.message); }
+    renderTurn(turn, null, false); pendingSessionReady = true;
+
+    if (diffLoading && diffContent) {
+        diffLoading.style.display = "none";
+        diffContent.style.display = "block";
+    }
+
+  } catch (err) { 
+      alert("Initialization Error: " + err.message); 
+      if (diffModal) diffModal.classList.remove("active");
+  } finally {
+      isStartingSession = false;
+  }
 }
 
 function openDifficultyModal(scenarioType) { startSession(scenarioType); }

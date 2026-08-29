@@ -159,7 +159,6 @@ def _update_ai_recommendations(learner_id: str, db: DBSession):
             history_data.append({"scenario": s.scenario_type, "score": s.report.score, "errors": s.report.errors, "criteria": json.loads(s.report.criteria_json) if s.report.criteria_json else {}})
             
     if not history_data: return
-
     available_scenarios = [{"id": k, "label": v["label"], "tag": v.get("tag", "")} for k, v in SCENARIOS.items() if v.get("enabled")]
     try:
         ai_result = llm_service.generate_profile_recommendations(history_data, available_scenarios)
@@ -196,8 +195,7 @@ def _build_learner_profile_response(learner: models.LearnerProfile, db: DBSessio
 
     return LearnerProfileResponse(
         learner_id=learner.id, username=learner.username, display_name=learner.display_name,
-        training_track=learner.training_track or "Emergency Medicine", completed_cases=len(case_summaries),
-        total_available_cases=len([k for k,v in SCENARIOS.items() if v.get("enabled")]),
+        completed_cases=len(case_summaries), total_available_cases=len([k for k,v in SCENARIOS.items() if v.get("enabled")]),
         average_score=average_score, focus_area=focus_area, recommendations=recs, study_topics=topics, recent_cases=recent_cases
     )
 
@@ -220,11 +218,10 @@ def list_scenarios():
 def upsert_learner(payload: LearnerLoginRequest, db: DBSession = Depends(get_db)):
     learner = db.query(models.LearnerProfile).filter_by(username=payload.username.lower()).first()
     if learner is None:
-        learner = models.LearnerProfile(username=payload.username.lower(), email=payload.email.lower(), password_hash=get_password_hash(payload.password), display_name=payload.username, training_track=payload.training_track.strip() or "Emergency Medicine")
+        learner = models.LearnerProfile(username=payload.username.lower(), email=payload.email.lower(), password_hash=get_password_hash(payload.password), display_name=payload.username)
         db.add(learner)
     else:
         if learner.password_hash != get_password_hash(payload.password): raise HTTPException(status_code=401, detail="Hatalı şifre girdiniz.")
-        learner.training_track = payload.training_track.strip() or learner.training_track
     db.commit()
     db.refresh(learner)
     return _build_learner_profile_response(learner, db)
@@ -235,7 +232,6 @@ def get_learner_profile(learner_id: str, db: DBSession = Depends(get_db)):
     if not learner: raise HTTPException(status_code=404, detail="Learner profile not found")
     return _build_learner_profile_response(learner, db)
 
-# YENİ: Manuel Refresh Tuşu Endpoint'i
 @app.post("/learners/{username}/refresh-ai", response_model=LearnerProfileResponse)
 def refresh_ai(username: str, db: DBSession = Depends(get_db)):
     learner = db.query(models.LearnerProfile).filter_by(username=username.lower()).first()

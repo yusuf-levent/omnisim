@@ -15,7 +15,6 @@ class LearnerProfile(Base):
     email = Column(String, unique=True, index=True, nullable=True)
     password_hash = Column(String, nullable=True)
     display_name = Column(String, nullable=False)
-    training_track = Column(String, default="Emergency Medicine")
     ai_recommendations = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

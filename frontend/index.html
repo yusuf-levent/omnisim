@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OmniSim AI - Interactive Clinical Decision Simulator</title>
-  <link rel="stylesheet" href="assets/css/style.css?v=20260829-09" />
+  <link rel="stylesheet" href="assets/css/style.css?v=20260829-11" />
 </head>
 <body>
   <div id="app">
@@ -148,7 +148,7 @@
       </div>
     </section>
 
-    <!-- Login Modal -->
+    <!-- Login Modal (Training Track Kaldırıldı, Çıkış X ve Guest Butonu Eklendi) -->
     <div id="learner-login-modal" class="modal-overlay">
       <div class="modal-card login-card">
         <button class="modal-close-x" type="button" onclick="closeLearnerLogin()">×</button>
@@ -165,18 +165,19 @@
           <p style="font-size: 0.65rem; color: #94a3b8; margin-top: -6px;">Must contain at least 1 uppercase, 1 lowercase, and 1 number.</p>
           <label for="learner-password-confirm">Confirm Password</label>
           <input id="learner-password-confirm" type="password" placeholder="••••••••" required />
-          <label for="learner-track-select">Training Track</label>
-          <select id="learner-track-select">
-            <option value="Emergency Medicine">Emergency Medicine</option>
-            <option value="Courtroom Practice">Courtroom Practice</option>
-            <option value="Crisis Management">Crisis Management</option>
-          </select>
-          <button class="btn-modal" type="submit">LOGIN / REGISTER</button>
+          
+          <!-- YENİ: Şık Kırmızı Hata Mesajı Kutusu -->
+          <div id="login-error-msg" style="color: #ef4444; font-size: 0.85rem; font-weight: bold; margin-top: 4px; display: none; text-align: center;"></div>
+
+          <div style="display: flex; gap: 10px; margin-top: 8px;">
+            <button id="login-submit-btn" class="btn-modal" type="submit" style="flex: 1;">LOGIN / REGISTER</button>
+            <button class="btn-modal secondary" type="button" onclick="closeLearnerLogin()" style="flex: 1;">CONTINUE AS GUEST</button>
+          </div>
         </form>
       </div>
     </div>
 
-    <!-- Profile Modal -->
+    <!-- Profile Modal (Study Topics ve AI Mentor) -->
     <div id="learner-profile-modal" class="modal-overlay">
       <div class="modal-card profile-card">
         <button class="modal-close-x" type="button" onclick="closeLearnerProfile()">×</button>
@@ -243,23 +244,33 @@
     <div id="difficulty-modal" class="modal-overlay">
       <div class="modal-card difficulty-card">
         <button class="modal-close-x" type="button" onclick="closeDifficultyModal()">×</button>
-        <div class="modal-badge">🚨 EMS INCOMING NOTIFICATION</div>
-        <h2>Patient Intake Briefing</h2>
-        <p id="difficulty-modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
-        <div class="modal-details-grid difficulty-details">
-          <div><strong>Age / Gender:</strong> <span id="difficulty-age-gender">--</span></div>
-          <div><strong>Working Diagnosis:</strong> <span id="difficulty-tani">--</span></div>
-          <div><strong>Baseline HR:</strong> <span id="difficulty-nabiz">--</span> bpm</div>
-          <div><strong>Baseline BP:</strong> <span id="difficulty-tansiyon">--</span></div>
+        
+        <!-- Yükleniyor Animasyonu -->
+        <div id="diff-loading" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 40px 0;">
+           <div class="outcome-spinner" style="width: 44px; height: 44px; margin-bottom: 24px; border-width: 4px;"></div>
+           <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.5rem;">Generating Case...</h2>
+           <p style="color: #94a3b8; font-size: 0.95rem;">AI is preparing patient parameters, vitals, and initial EMS reports.</p>
         </div>
-        <div class="difficulty-label">Choose Simulation Mode</div>
-        <div class="difficulty-options">
-          <button class="difficulty-option easy" onclick="confirmDifficultySelection('easy')">
-            <span class="difficulty-icon">🧭</span><span>Guided</span><strong>Quick action buttons enabled.</strong>
-          </button>
-          <button class="difficulty-option hard" onclick="confirmDifficultySelection('hard')">
-            <span class="difficulty-icon">🎯</span><span>Expert</span><strong>Free-text orders only.</strong>
-          </button>
+
+        <div id="diff-content">
+          <div class="modal-badge">🚨 EMS INCOMING NOTIFICATION</div>
+          <h2>Patient Intake Briefing</h2>
+          <p id="difficulty-modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
+          <div class="modal-details-grid difficulty-details">
+            <div><strong>Age / Gender:</strong> <span id="difficulty-age-gender">--</span></div>
+            <div><strong>Working Diagnosis:</strong> <span id="difficulty-tani">--</span></div>
+            <div><strong>Baseline HR:</strong> <span id="difficulty-nabiz">--</span> bpm</div>
+            <div><strong>Baseline BP:</strong> <span id="difficulty-tansiyon">--</span></div>
+          </div>
+          <div class="difficulty-label">Choose Simulation Mode</div>
+          <div class="difficulty-options">
+            <button class="difficulty-option easy" onclick="confirmDifficultySelection('easy')">
+              <span class="difficulty-icon">🧭</span><span>Guided</span><strong>Quick action buttons enabled.</strong>
+            </button>
+            <button class="difficulty-option hard" onclick="confirmDifficultySelection('hard')">
+              <span class="difficulty-icon">🎯</span><span>Expert</span><strong>Free-text orders only.</strong>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -302,7 +313,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260829-09"></script>
-  <script src="assets/js/app.js?v=20260829-09"></script>
+  <script src="assets/js/config.js?v=20260829-11"></script>
+  <script src="assets/js/app.js?v=20260829-11"></script>
 </body>
 </html>

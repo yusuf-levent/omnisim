@@ -2,6 +2,13 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #070c18; background-image: radial-gradient(circle at 50% 0%, #111f38 0%, #060911 100%); color: #e2e8f0; min-height: 100vh; display: flex; justify-content: center; user-select: none; }
+
+/* GÜNCELLENDİ: Global Scrollbar (Beyaz Çubuk Hatasını Kökünden Çözer) */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #070c18; }
+::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
+
 input, textarea { user-select: text; }
 #app { width: 100%; max-width: 1440px; padding: 16px 24px; display: flex; flex-direction: column; }
 .top-nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; margin-bottom: 16px; }
@@ -86,10 +93,6 @@ input, textarea { user-select: text; }
 .chat-panel { grid-column: 2 / 3; grid-row: 2 / 3; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .turn-indicator { font-family: 'JetBrains Mono', monospace; color: #38bdf8; }
 .chat-log { flex: 1; min-height: 0; max-height: none; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; padding-right: 8px; }
-.chat-log::-webkit-scrollbar { width: 6px; }
-.chat-log::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 8px; }
-.chat-log::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 8px; }
-.chat-log::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
 .log-entry { max-width: 88%; min-width: 180px; padding: 12px 16px; border-radius: 12px; font-size: 0.92rem; line-height: 1.45; overflow-wrap: anywhere; animation: fadeIn 0.2s ease-out; }
 .log-entry.hasta { background: #1e293b; color: #f1f5f9; align-self: flex-start; border: 1px solid rgba(255, 255, 255, 0.05); }
 .log-entry.hasta::before { content: '👤 [PATIENT]'; display: block; font-size: 0.65rem; font-weight: 700; color: #94a3b8; margin-bottom: 4px; }
@@ -131,19 +134,11 @@ input, textarea { user-select: text; }
 .timer-desc { font-size: 0.75rem; color: #64748b; line-height: 1.4; }
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(3, 7, 18, 0.85); backdrop-filter: blur(8px); justify-content: center; align-items: center; z-index: 1000; }
 .modal-overlay.active { display: flex; animation: fadeIn 0.2s ease-out; }
-.modal-card { position: relative; background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 18px; padding: 30px; max-width: 520px; width: 90%; text-align: center; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); }
-
-/* GÜNCELLENDİ: SCROLLBAR STİLLERİ (Şık Karanlık Tema) */
-.modal-card { max-height: 90vh; overflow-y: auto; }
-.modal-card::-webkit-scrollbar { width: 6px; }
-.modal-card::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 8px; margin: 10px 0; }
-.modal-card::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 8px; }
-.modal-card::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
-
+.modal-card { position: relative; background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 18px; padding: 30px; max-width: 520px; width: 90%; text-align: center; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6); max-height: 90vh; overflow-y: auto; }
 .modal-close-x { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border: 1px solid rgba(148, 163, 184, 0.24); border-radius: 10px; background: rgba(15, 23, 42, 0.82); color: #cbd5e1; font-size: 1.35rem; line-height: 1; cursor: pointer; transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease; }
 .modal-close-x:hover { background: rgba(239, 68, 68, 0.16); border-color: rgba(248, 113, 113, 0.5); color: #fff; }
 .modal-card.wide { max-width: 720px; }
-.profile-card { max-width: 760px; text-align: left; }
+.profile-card { max-width: 900px !important; text-align: left; }
 .profile-card h2 { color: #fff; margin-bottom: 4px; text-align: left; }
 .profile-track { color: #94a3b8; font-size: 0.86rem; margin-bottom: 18px; }
 .login-card { max-width: 540px; text-align: left; }
@@ -182,7 +177,7 @@ input, textarea { user-select: text; }
 .btn-modal.secondary:hover { background: #334155; }
 .btn-modal.danger { background: #dc2626; border: 1px solid rgba(248, 113, 113, 0.55); box-shadow: 0 0 18px rgba(239, 68, 68, 0.22); }
 .btn-modal.danger:hover { background: #b91c1c; }
-.outcome-loading { display: none; align-items: center; justify-content: center; gap: 10px; min-height: 46px; margin: 4px 0 22px; color: #38bdf8; font-weight: 800; }
+.outcome-loading { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; margin: 4px 0 22px; color: #38bdf8; font-weight: 800; }
 .outcome-spinner { width: 22px; height: 22px; border-radius: 999px; border: 3px solid rgba(56, 189, 248, 0.2); border-top-color: #38bdf8; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .difficulty-card { max-width: 680px; padding: 32px; border-color: rgba(56, 189, 248, 0.48); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.72), 0 0 30px rgba(56, 189, 248, 0.12); }
@@ -251,10 +246,6 @@ input, textarea { user-select: text; }
   .profile-history-item { flex-direction: column; gap: 8px; }
 }
 
-/* ==========================================================================
-   Adaptive Recommendations Cards & Profile Split Layout
-   ========================================================================== */
-.profile-card { max-width: 900px !important; }
 .profile-split-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
 .study-topics-list { display: flex; flex-direction: column; gap: 8px; }
 .study-topic-item { background: rgba(16, 185, 129, 0.1); border-left: 3px solid #10b981; padding: 10px 14px; border-radius: 6px; font-size: 0.85rem; color: #dbeafe; }
