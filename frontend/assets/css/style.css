@@ -84,6 +84,24 @@ textarea {
   transition: all 0.2s ease;
 }
 
+.btn-profile {
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.34);
+  color: #c4b5fd;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-profile:hover {
+  background: rgba(139, 92, 246, 0.24);
+  border-color: #a78bfa;
+  color: #fff;
+}
+
 .btn-audio:hover {
   background: rgba(56, 189, 248, 0.25);
   border-color: #38bdf8;
@@ -1032,6 +1050,93 @@ textarea {
   max-width: 720px;
 }
 
+.profile-card {
+  max-width: 760px;
+  text-align: left;
+}
+
+.profile-card h2 {
+  color: #fff;
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.profile-stats div,
+.profile-rec-item,
+.profile-history-item {
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.profile-stats span {
+  display: block;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.profile-stats strong {
+  color: #f8fafc;
+  font-size: 1.05rem;
+}
+
+.profile-section {
+  margin-top: 16px;
+}
+
+.profile-section h4 {
+  color: #cbd5e1;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.profile-recommendations,
+.profile-history {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-rec-item {
+  color: #dbeafe;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  border-left: 3px solid #8b5cf6;
+}
+
+.profile-history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+}
+
+.profile-history-item span {
+  display: block;
+  color: #94a3b8;
+  margin-top: 3px;
+}
+
+.profile-empty {
+  color: #94a3b8;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .modal-badge {
   color: #ef4444;
   font-size: 0.75rem;
@@ -1575,11 +1680,17 @@ textarea {
 
   .confirm-summary,
   .modal-actions,
-  .difficulty-options {
+  .difficulty-options,
+  .profile-stats {
     grid-template-columns: 1fr;
   }
 
   .difficulty-option {
     min-height: 108px;
+  }
+
+  .profile-history-item {
+    flex-direction: column;
+    gap: 8px;
   }
 }

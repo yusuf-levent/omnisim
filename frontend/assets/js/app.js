@@ -30,6 +30,9 @@ let sessionStartTime = null;
 let audioCtx = null;
 let isAudioEnabled = true;
 let cachedReportData = null;
+const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v1";
+const MAX_PROFILE_HISTORY = 8;
+let memoryLearnerProfile = null;
 
 // 1. Dynamic Differential Diagnosis (DDx) Profiles
 const DDX_PROFILES = {
@@ -884,6 +887,198 @@ function buildOutcomeCopy(report) {
   };
 }
 
+function defaultLearnerProfile() {
+  return {
+    learnerName: "Dr. On-Duty Resident",
+    completedCases: [],
+  };
+}
+
+function loadLearnerProfile() {
+  if (memoryLearnerProfile) return memoryLearnerProfile;
+  try {
+    const stored = JSON.parse(window.localStorage?.getItem(LEARNER_PROFILE_KEY) || "null");
+    if (stored && Array.isArray(stored.completedCases)) {
+      memoryLearnerProfile = stored;
+      return stored;
+    }
+  } catch (_) {}
+  memoryLearnerProfile = defaultLearnerProfile();
+  return memoryLearnerProfile;
+}
+
+function saveLearnerProfile(profile) {
+  memoryLearnerProfile = profile;
+  try {
+    window.localStorage?.setItem(LEARNER_PROFILE_KEY, JSON.stringify(profile));
+  } catch (_) {}
+}
+
+function formatScenarioName(key) {
+  return String(key || "clinical_case")
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function lowestCriteriaKey(criteria = {}) {
+  const entries = Object.entries(criteria);
+  if (!entries.length) return "protocol_adherence";
+  return entries.reduce((lowest, current) => {
+    const currentVal = Number(current[1] ?? 25);
+    const lowestVal = Number(lowest[1] ?? 25);
+    return currentVal < lowestVal ? current : lowest;
+  })[0];
+}
+
+function criteriaLabel(key) {
+  const labels = {
+    protocol_adherence: "Protocol",
+    diagnostic_accuracy: "Diagnosis",
+    patient_safety: "Safety",
+    pharmacology_precision: "Pharmacology",
+  };
+  return labels[key] || "Protocol";
+}
+
+function recommendationForFocus(focusKey, latestCase) {
+  const scenario = latestCase?.scenario || "acute_coronary_syndrome";
+  const score = Number(latestCase?.score || 0);
+  const scenarioName = formatScenarioName(scenario);
+
+  if (score >= 90) {
+    return `Advance to Expert Mode in ${scenarioName} or choose a different emergency case to test transfer of judgment.`;
+  }
+
+  const recs = {
+    protocol_adherence: `Repeat ${scenarioName} and focus on completing the definitive protocol bundle before ending the case.`,
+    diagnostic_accuracy: `Practice diagnostic confirmation in ${scenarioName}: order the decisive test early and act on the result without delay.`,
+    patient_safety: `Run a respiratory or shock case next and prioritize airway, oxygenation, circulation, and contraindication checks.`,
+    pharmacology_precision: `Review medication timing and dosing, then retry ${scenarioName} in Expert Mode without quick action prompts.`,
+  };
+  return recs[focusKey] || recs.protocol_adherence;
+}
+
+function buildLearnerRecommendations(profile) {
+  const cases = profile.completedCases || [];
+  if (!cases.length) {
+    return [
+      "Complete your first simulation to unlock adaptive recommendations.",
+      "Start with Guided Mode, then repeat the same case in Expert Mode.",
+      "Recommended first case: Acute Coronary Syndrome (STEMI).",
+    ];
+  }
+
+  const latest = cases[0];
+  const focusKey = lowestCriteriaKey(latest.criteria || {});
+  const avgScore = Math.round(cases.reduce((sum, item) => sum + Number(item.score || 0), 0) / cases.length);
+  const recommendations = [recommendationForFocus(focusKey, latest)];
+
+  if (avgScore < 75) {
+    recommendations.push("Use Guided Mode for one more run, then compare your timeline against the final feedback.");
+  } else {
+    recommendations.push("Move one frequent case into Expert Mode to remove quick action support.");
+  }
+
+  if (/cath|pci|reperfusion|p2y12|heparin|anticoag/i.test(latest.errors || "")) {
+    recommendations.push("STEMI focus: activate reperfusion early and complete antiplatelet plus anticoagulation steps.");
+  } else if (/airway|oxygen|spo2|ventilat/i.test(latest.errors || "")) {
+    recommendations.push("Respiratory focus: stabilize oxygenation before lower-priority diagnostics.");
+  } else {
+    recommendations.push("Next challenge: choose a different specialty case to test whether the same decision pattern transfers.");
+  }
+
+  return recommendations.slice(0, 3);
+}
+
+function updateLearnerProfile(report) {
+  if (!report) return;
+  const profile = loadLearnerProfile();
+  const caseRecord = {
+    sessionId: currentSessionId,
+    scenario: activeScenarioKey,
+    score: Number(report.score || 0),
+    badge: String(report.status_badge || "COMPLETED"),
+    criteria: report.criteria || {},
+    strengths: String(report.strengths || ""),
+    errors: String(report.errors || ""),
+    suggestions: String(report.suggestions || ""),
+    completedAt: new Date().toISOString(),
+  };
+
+  const previousCases = (profile.completedCases || []).filter(
+    (item) => !currentSessionId || item.sessionId !== currentSessionId
+  );
+  profile.completedCases = [caseRecord, ...previousCases].slice(0, MAX_PROFILE_HISTORY);
+  saveLearnerProfile(profile);
+  renderLearnerProfile();
+}
+
+function renderLearnerProfile() {
+  const profile = loadLearnerProfile();
+  const cases = profile.completedCases || [];
+  const caseCountEl = document.getElementById("profile-case-count");
+  const avgScoreEl = document.getElementById("profile-avg-score");
+  const focusEl = document.getElementById("profile-focus-area");
+  const recContainer = document.getElementById("profile-recommendations");
+  const historyContainer = document.getElementById("profile-history");
+
+  const avgScore = cases.length
+    ? Math.round(cases.reduce((sum, item) => sum + Number(item.score || 0), 0) / cases.length)
+    : null;
+  const focusKey = cases.length ? lowestCriteriaKey(cases[0].criteria || {}) : "protocol_adherence";
+
+  if (caseCountEl) caseCountEl.textContent = cases.length;
+  if (avgScoreEl) avgScoreEl.textContent = avgScore === null ? "--" : `${avgScore}/100`;
+  if (focusEl) focusEl.textContent = criteriaLabel(focusKey);
+
+  if (recContainer) {
+    recContainer.textContent = "";
+    buildLearnerRecommendations(profile).forEach((text) => {
+      const item = document.createElement("div");
+      item.className = "profile-rec-item";
+      item.textContent = text;
+      recContainer.appendChild(item);
+    });
+  }
+
+  if (historyContainer) {
+    historyContainer.textContent = "";
+    if (!cases.length) {
+      const empty = document.createElement("p");
+      empty.className = "profile-empty";
+      empty.textContent = "No completed simulations yet. Finish a case to build your learning profile.";
+      historyContainer.appendChild(empty);
+    } else {
+      cases.slice(0, 4).forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "profile-history-item";
+
+        const detail = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = formatScenarioName(item.scenario);
+        const badge = document.createElement("span");
+        badge.textContent = item.badge;
+        detail.append(title, badge);
+
+        const score = document.createElement("strong");
+        score.textContent = `${item.score}/100`;
+        row.append(detail, score);
+        historyContainer.appendChild(row);
+      });
+    }
+  }
+}
+
+function openLearnerProfile() {
+  renderLearnerProfile();
+  document.getElementById("learner-profile-modal")?.classList.add("active");
+}
+
+function closeLearnerProfile() {
+  document.getElementById("learner-profile-modal")?.classList.remove("active");
+}
+
 // --- 6. Turn Rendering & DDx Updates ---
 let lastSystemNote = "";
 
@@ -1243,6 +1438,7 @@ function proceedToScorecard() {
   document.getElementById("report-mistakes").textContent = report.errors;
   document.getElementById("report-suggestion").textContent = report.suggestions;
 
+  updateLearnerProfile(report);
   renderTimelineReplay();
   showScreen("report");
   drawRadarChart(report.criteria);
@@ -1475,4 +1671,5 @@ function stopECGAnimation() {
   }
 }
 
+renderLearnerProfile();
 loadScenarios();

@@ -18,6 +18,8 @@ Live demo: https://omni.weetis.com/
   - Expert: free-text clinical orders only.
 - Shows real-time bedside telemetry, vitals, differential diagnosis estimates,
   lab/ECG panels, action timelines, and final educational feedback.
+- Maintains a browser-local learner profile that turns completed simulation
+  reports into adaptive recommendations and recent performance memory.
 - Stores session logs, vital states, and evaluation reports through a FastAPI
   backend with SQLAlchemy and Alembic migrations.
 
@@ -35,7 +37,7 @@ The long-term vision is to expand OmniSim beyond emergency medicine:
 - a public scenario discovery page,
 - scenario packs for different professions and domains,
 - instructor dashboards,
-- repeatable assessment history,
+- account-based learning history and analytics,
 - and domain-specific simulation templates for healthcare, crisis response,
   legal training, customer support, sales, engineering operations, and other
   decision-heavy fields.
@@ -161,6 +163,9 @@ needs custom UI support.
   interventions are not lost during scoring.
 - Report metrics are persisted and reused consistently when a completed report
   is opened again.
+- The frontend learner profile uses local browser storage for the hackathon
+  demo. A production version would move this into authenticated accounts and
+  cross-device learning analytics.
 - If the LLM provider is temporarily unavailable during report generation, the
   backend returns a conservative fallback report from the recorded action log
   instead of leaving the demo without an evaluation screen.

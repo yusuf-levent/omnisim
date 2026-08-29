@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OmniSim AI - Interactive Clinical Decision Simulator</title>
-  <link rel="stylesheet" href="assets/css/style.css?v=20260828-12" />
+  <link rel="stylesheet" href="assets/css/style.css?v=20260829-01" />
 </head>
 <body>
   <div id="app">
@@ -16,6 +16,9 @@
         <div class="brand-title">OmniSim <span>AI</span></div>
       </div>
       <div class="nav-user">
+        <button id="btn-profile" class="btn-profile" onclick="openLearnerProfile()">
+          🧠 PROFILE
+        </button>
         <button id="btn-audio-toggle" class="btn-audio" onclick="toggleAudio()">
           🔊 SOUND: <span id="audio-status">ON</span>
         </button>
@@ -250,6 +253,37 @@
     </section>
 
     <!-- 4. EMS Arrival Pop-up Modal -->
+    <div id="learner-profile-modal" class="modal-overlay">
+      <div class="modal-card profile-card">
+        <button class="modal-close-x" type="button" onclick="closeLearnerProfile()" aria-label="Close learner profile">×</button>
+        <div class="modal-badge">🧠 PERSONALIZED LEARNING PROFILE</div>
+        <h2>Dr. On-Duty Resident</h2>
+        <div class="profile-stats">
+          <div>
+            <span>Cases</span>
+            <strong id="profile-case-count">0</strong>
+          </div>
+          <div>
+            <span>Avg Score</span>
+            <strong id="profile-avg-score">--</strong>
+          </div>
+          <div>
+            <span>Focus</span>
+            <strong id="profile-focus-area">Protocol</strong>
+          </div>
+        </div>
+        <div class="profile-section">
+          <h4>Adaptive Recommendations</h4>
+          <div id="profile-recommendations" class="profile-recommendations"></div>
+        </div>
+        <div class="profile-section">
+          <h4>Recent Simulation Memory</h4>
+          <div id="profile-history" class="profile-history"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. EMS Arrival Pop-up Modal -->
     <div id="patient-modal" class="modal-overlay">
       <div class="modal-card">
         <div class="modal-badge">🚨 EMS INCOMING TRAUMA/MEDICAL NOTIFICATION</div>
@@ -267,7 +301,7 @@
       </div>
     </div>
 
-    <!-- 5. Feature: Dynamic Diagnostics & Lab Results Modal -->
+    <!-- 6. Feature: Dynamic Diagnostics & Lab Results Modal -->
     <div id="lab-modal" class="modal-overlay">
       <div class="modal-card wide">
         <div class="modal-badge">🔬 STAT EMERGENCY DIAGNOSTICS</div>
@@ -277,7 +311,7 @@
       </div>
     </div>
 
-    <!-- 6. Feature: Difficulty Selection Modal -->
+    <!-- 7. Feature: Difficulty Selection Modal -->
     <div id="difficulty-modal" class="modal-overlay">
       <div class="modal-card difficulty-card">
         <button class="modal-close-x" type="button" onclick="closeDifficultyModal()" aria-label="Close difficulty selection">×</button>
@@ -306,7 +340,7 @@
       </div>
     </div>
 
-    <!-- 7. Feature: Manual Case Conclusion Confirmation Modal -->
+    <!-- 8. Feature: Manual Case Conclusion Confirmation Modal -->
     <div id="abort-confirm-modal" class="modal-overlay">
       <div class="modal-card confirm-card">
         <div class="modal-badge">⚠️ CASE TERMINATION REQUEST</div>
@@ -337,7 +371,7 @@
       </div>
     </div>
 
-    <!-- 8. Feature: Clinical Outcome Pop-up Modal -->
+    <!-- 9. Feature: Clinical Outcome Pop-up Modal -->
     <div id="outcome-modal" class="modal-overlay">
       <div class="modal-card">
         <div id="outcome-badge" class="modal-badge">🚨 CLINICAL OUTCOME NOTICE</div>
@@ -361,7 +395,7 @@
     
   </div>
 
-  <script src="assets/js/config.js?v=20260828-13"></script>
-  <script src="assets/js/app.js?v=20260828-13"></script>
+  <script src="assets/js/config.js?v=20260829-01"></script>
+  <script src="assets/js/app.js?v=20260829-01"></script>
 </body>
 </html>
