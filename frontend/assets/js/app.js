@@ -3,152 +3,46 @@ const apiUrl = (path) => `${API_BASE}${path.startsWith("/") ? path : `/${path}`}
 const API_TIMEOUT_MS = 45000;
 let currentSessionId = null;
 let activeScenarioKey = "acute_coronary_syndrome";
-
-// Simulation State Engine
-let currentHeartRate = 105;
-let currentSpO2 = 94;
-let currentBP = "150/95";
-let currentConsciousness = "Alert";
-let heartRateDrift = 0.4;
-let minHeartRate = 35;
-let maxHeartRate = 185;
+let currentHeartRate = 105, currentSpO2 = 94, currentBP = "150/95", currentConsciousness = "Alert";
+let heartRateDrift = 0.4, minHeartRate = 35, maxHeartRate = 185;
 let timeLeft = 30;
 const TURN_DURATION = 30;
-let gameLoopInterval = null;
-let isRequestInProgress = false;
-let hasBreachedThreshold = false;
-let isEndingSession = false;
-let selectedDifficulty = "easy";
-let pendingScenarioKey = null;
-let pendingSessionReady = false;
-
-// Event Timeline Tracking
-let sessionActionLogs = [];
-let sessionStartTime = null;
-
-// Web Audio API State & Telemetry
-let audioCtx = null;
-let isAudioEnabled = true;
-let cachedReportData = null;
-const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v2";
+let gameLoopInterval = null, isRequestInProgress = false, hasBreachedThreshold = false, isEndingSession = false;
+let selectedDifficulty = "easy", pendingScenarioKey = null, pendingSessionReady = false;
+let sessionActionLogs = [], sessionStartTime = null;
+let audioCtx = null, isAudioEnabled = true, cachedReportData = null;
+const LEARNER_PROFILE_KEY = "omnisim_learner_profile_v5";
 const MAX_PROFILE_HISTORY = 8;
 let memoryLearnerProfile = null;
 
-// 1. Dynamic Differential Diagnosis (DDx) Profiles
+// =========================================================================
+// 1. STATİK VERİLER (DDX, QUICK ACTIONS, LAB PANELS)
+// =========================================================================
 const DDX_PROFILES = {
-  acute_coronary_syndrome: [
-    { name: "Acute Anterior STEMI / ACS", baseProb: 88, color: "red" },
-    { name: "Aortic Dissection", baseProb: 8, color: "yellow" },
-    { name: "Pulmonary Embolism", baseProb: 4, color: "blue" },
-  ],
-  acute_ischemic_stroke: [
-    { name: "Acute Left MCA Ischemic Stroke", baseProb: 85, color: "red" },
-    { name: "Hemorrhagic Stroke", baseProb: 10, color: "yellow" },
-    { name: "Hypoglycemia / Todd's Paralysis", baseProb: 5, color: "blue" },
-  ],
-  acute_pulmonary_edema: [
-    { name: "Acute Cardiogenic Pulmonary Edema", baseProb: 86, color: "red" },
-    { name: "Severe Pneumonia / ARDS", baseProb: 9, color: "yellow" },
-    { name: "Acute COPD Exacerbation", baseProb: 5, color: "blue" },
-  ],
-  anaphylactic_shock: [
-    { name: "Severe Anaphylactic Shock", baseProb: 89, color: "red" },
-    { name: "Acute Laryngospasm / Foreign Body", baseProb: 7, color: "yellow" },
-    { name: "Vasovagal Syncope", baseProb: 4, color: "blue" },
-  ],
-  diabetic_ketoacidosis: [
-    { name: "Diabetic Ketoacidosis (DKA)", baseProb: 87, color: "red" },
-    { name: "Hyperosmolar Hyperglycemic State", baseProb: 8, color: "yellow" },
-    { name: "Acute Pancreatitis / Sepsis", baseProb: 5, color: "blue" },
-  ],
-  hypovolemic_shock: [
-    { name: "Hemorrhagic Hypovolemic Shock", baseProb: 88, color: "red" },
-    { name: "Ruptured Ectopic / Abdominal Trauma", baseProb: 8, color: "yellow" },
-    { name: "Septic Shock", baseProb: 4, color: "blue" },
-  ],
-  status_asthmaticus: [
-    { name: "Severe Status Asthmaticus", baseProb: 88, color: "red" },
-    { name: "Foreign Body Aspiration", baseProb: 7, color: "yellow" },
-    { name: "Tension Pneumothorax", baseProb: 5, color: "blue" },
-  ],
-  tension_pneumothorax: [
-    { name: "Tension Pneumothorax", baseProb: 90, color: "red" },
-    { name: "Cardiac Tamponade", baseProb: 6, color: "yellow" },
-    { name: "Massive Hemothorax", baseProb: 4, color: "blue" },
-  ],
-  septic_shock: [
-    { name: "Septic Shock (Urosepsis)", baseProb: 86, color: "red" },
-    { name: "Adrenal Crisis", baseProb: 8, color: "yellow" },
-    { name: "Cardiogenic Shock", baseProb: 6, color: "blue" },
-  ],
-  opioid_overdose: [
-    { name: "Acute Opioid Toxicity", baseProb: 92, color: "red" },
-    { name: "Severe Hypothermia / Myxedema", baseProb: 5, color: "yellow" },
-    { name: "Brainstem Hemorrhage", baseProb: 3, color: "blue" },
-  ],
-  acute_opioid_toxicity: [
-    { name: "Acute Opioid Toxicity", baseProb: 92, color: "red" },
-    { name: "Severe Hypothermia / Myxedema", baseProb: 5, color: "yellow" },
-    { name: "Brainstem Hemorrhage", baseProb: 3, color: "blue" },
-  ],
-  hyperkalemia_crisis: [
-    { name: "Severe Hyperkalemia", baseProb: 90, color: "red" },
-    { name: "Complete Heart Block", baseProb: 7, color: "yellow" },
-    { name: "Digoxin Toxicity", baseProb: 3, color: "blue" },
-  ],
-  adrenal_crisis: [
-    { name: "Acute Adrenal Crisis", baseProb: 87, color: "red" },
-    { name: "Septic Shock", baseProb: 9, color: "yellow" },
-    { name: "DKA / Hypoglycemic Crisis", baseProb: 4, color: "blue" },
-  ],
-  meningococcal_sepsis: [
-    { name: "Meningococcal Sepsis", baseProb: 88, color: "red" },
-    { name: "Viral Meningitis", baseProb: 7, color: "yellow" },
-    { name: "Rocky Mountain Spotted Fever", baseProb: 5, color: "blue" },
-  ],
-  eclampsia: [
-    { name: "Eclampsia", baseProb: 90, color: "red" },
-    { name: "Intracranial Hemorrhage", baseProb: 6, color: "yellow" },
-    { name: "Epileptic Seizure Disorder", baseProb: 4, color: "blue" },
-  ],
-  upper_gi_bleed: [
-    { name: "Massive Upper GI Bleed", baseProb: 88, color: "red" },
-    { name: "Ruptured Esophageal Varix", baseProb: 8, color: "yellow" },
-    { name: "Lower GI Bleed", baseProb: 4, color: "blue" },
-  ],
-  carbon_monoxide_poisoning: [
-    { name: "Carbon Monoxide Poisoning", baseProb: 86, color: "red" },
-    { name: "Cyanide Toxicity", baseProb: 8, color: "yellow" },
-    { name: "Viral Syndrome / Migraine", baseProb: 6, color: "blue" },
-  ],
-  pediatric_svt: [
-    { name: "Pediatric SVT", baseProb: 91, color: "red" },
-    { name: "Sinus Tachycardia from Shock", baseProb: 6, color: "yellow" },
-    { name: "Atrial Flutter", baseProb: 3, color: "blue" },
-  ],
-  exertional_heat_stroke: [
-    { name: "Exertional Heat Stroke", baseProb: 89, color: "red" },
-    { name: "Sepsis with Hyperthermia", baseProb: 7, color: "yellow" },
-    { name: "Serotonin Syndrome", baseProb: 4, color: "blue" },
-  ],
-  thyroid_storm: [
-    { name: "Thyroid Storm", baseProb: 87, color: "red" },
-    { name: "Sepsis / Hyperadrenergic Shock", baseProb: 8, color: "yellow" },
-    { name: "Stimulant Toxicity", baseProb: 5, color: "blue" },
-  ],
-  massive_pulmonary_embolism: [
-    { name: "Massive Pulmonary Embolism", baseProb: 88, color: "red" },
-    { name: "Tension Pneumothorax", baseProb: 7, color: "yellow" },
-    { name: "Acute Coronary Syndrome", baseProb: 5, color: "blue" },
-  ],
-  default: [
-    { name: "Primary Clinical Condition", baseProb: 85, color: "red" },
-    { name: "Secondary Differential", baseProb: 10, color: "yellow" },
-    { name: "Alternative Etiology", baseProb: 5, color: "blue" },
-  ],
+  acute_coronary_syndrome: [{ name: "Acute Anterior STEMI / ACS", baseProb: 88, color: "red" }, { name: "Aortic Dissection", baseProb: 8, color: "yellow" }, { name: "Pulmonary Embolism", baseProb: 4, color: "blue" }],
+  acute_ischemic_stroke: [{ name: "Acute Left MCA Ischemic Stroke", baseProb: 85, color: "red" }, { name: "Hemorrhagic Stroke", baseProb: 10, color: "yellow" }, { name: "Hypoglycemia / Todd's Paralysis", baseProb: 5, color: "blue" }],
+  acute_pulmonary_edema: [{ name: "Acute Cardiogenic Pulmonary Edema", baseProb: 86, color: "red" }, { name: "Severe Pneumonia / ARDS", baseProb: 9, color: "yellow" }, { name: "Acute COPD Exacerbation", baseProb: 5, color: "blue" }],
+  anaphylactic_shock: [{ name: "Severe Anaphylactic Shock", baseProb: 89, color: "red" }, { name: "Acute Laryngospasm / Foreign Body", baseProb: 7, color: "yellow" }, { name: "Vasovagal Syncope", baseProb: 4, color: "blue" }],
+  diabetic_ketoacidosis: [{ name: "Diabetic Ketoacidosis (DKA)", baseProb: 87, color: "red" }, { name: "Hyperosmolar Hyperglycemic State", baseProb: 8, color: "yellow" }, { name: "Acute Pancreatitis / Sepsis", baseProb: 5, color: "blue" }],
+  hypovolemic_shock: [{ name: "Hemorrhagic Hypovolemic Shock", baseProb: 88, color: "red" }, { name: "Ruptured Ectopic / Abdominal Trauma", baseProb: 8, color: "yellow" }, { name: "Septic Shock", baseProb: 4, color: "blue" }],
+  status_asthmaticus: [{ name: "Severe Status Asthmaticus", baseProb: 88, color: "red" }, { name: "Foreign Body Aspiration", baseProb: 7, color: "yellow" }, { name: "Tension Pneumothorax", baseProb: 5, color: "blue" }],
+  tension_pneumothorax: [{ name: "Tension Pneumothorax", baseProb: 90, color: "red" }, { name: "Cardiac Tamponade", baseProb: 6, color: "yellow" }, { name: "Massive Hemothorax", baseProb: 4, color: "blue" }],
+  septic_shock: [{ name: "Septic Shock (Urosepsis)", baseProb: 86, color: "red" }, { name: "Adrenal Crisis", baseProb: 8, color: "yellow" }, { name: "Cardiogenic Shock", baseProb: 6, color: "blue" }],
+  opioid_overdose: [{ name: "Acute Opioid Toxicity", baseProb: 92, color: "red" }, { name: "Severe Hypothermia / Myxedema", baseProb: 5, color: "yellow" }, { name: "Brainstem Hemorrhage", baseProb: 3, color: "blue" }],
+  acute_opioid_toxicity: [{ name: "Acute Opioid Toxicity", baseProb: 92, color: "red" }, { name: "Severe Hypothermia / Myxedema", baseProb: 5, color: "yellow" }, { name: "Brainstem Hemorrhage", baseProb: 3, color: "blue" }],
+  hyperkalemia_crisis: [{ name: "Severe Hyperkalemia", baseProb: 90, color: "red" }, { name: "Complete Heart Block", baseProb: 7, color: "yellow" }, { name: "Digoxin Toxicity", baseProb: 3, color: "blue" }],
+  adrenal_crisis: [{ name: "Acute Adrenal Crisis", baseProb: 87, color: "red" }, { name: "Septic Shock", baseProb: 9, color: "yellow" }, { name: "DKA / Hypoglycemic Crisis", baseProb: 4, color: "blue" }],
+  meningococcal_sepsis: [{ name: "Meningococcal Sepsis", baseProb: 88, color: "red" }, { name: "Viral Meningitis", baseProb: 7, color: "yellow" }, { name: "Rocky Mountain Spotted Fever", baseProb: 5, color: "blue" }],
+  eclampsia: [{ name: "Eclampsia", baseProb: 90, color: "red" }, { name: "Intracranial Hemorrhage", baseProb: 6, color: "yellow" }, { name: "Epileptic Seizure Disorder", baseProb: 4, color: "blue" }],
+  upper_gi_bleed: [{ name: "Massive Upper GI Bleed", baseProb: 88, color: "red" }, { name: "Ruptured Esophageal Varix", baseProb: 8, color: "yellow" }, { name: "Lower GI Bleed", baseProb: 4, color: "blue" }],
+  carbon_monoxide_poisoning: [{ name: "Carbon Monoxide Poisoning", baseProb: 86, color: "red" }, { name: "Cyanide Toxicity", baseProb: 8, color: "yellow" }, { name: "Viral Syndrome / Migraine", baseProb: 6, color: "blue" }],
+  pediatric_svt: [{ name: "Pediatric SVT", baseProb: 91, color: "red" }, { name: "Sinus Tachycardia from Shock", baseProb: 6, color: "yellow" }, { name: "Atrial Flutter", baseProb: 3, color: "blue" }],
+  exertional_heat_stroke: [{ name: "Exertional Heat Stroke", baseProb: 89, color: "red" }, { name: "Sepsis with Hyperthermia", baseProb: 7, color: "yellow" }, { name: "Serotonin Syndrome", baseProb: 4, color: "blue" }],
+  thyroid_storm: [{ name: "Thyroid Storm", baseProb: 87, color: "red" }, { name: "Sepsis / Hyperadrenergic Shock", baseProb: 8, color: "yellow" }, { name: "Stimulant Toxicity", baseProb: 5, color: "blue" }],
+  massive_pulmonary_embolism: [{ name: "Massive Pulmonary Embolism", baseProb: 88, color: "red" }, { name: "Tension Pneumothorax", baseProb: 7, color: "yellow" }, { name: "Acute Coronary Syndrome", baseProb: 5, color: "blue" }],
+  default: [{ name: "Primary Clinical Condition", baseProb: 85, color: "red" }, { name: "Secondary Differential", baseProb: 10, color: "yellow" }, { name: "Alternative Etiology", baseProb: 5, color: "blue" }],
 };
 
-// 2. Scenario-Specific Quick Actions
 const QUICK_ACTIONS = {
   acute_coronary_syndrome: [
     { label: "🫁 High-Flow O2", cmd: "Administer High-Flow Oxygen via Non-Rebreather Mask (15L/min)" },
@@ -330,7 +224,6 @@ const QUICK_ACTIONS = {
   ],
 };
 
-// 3. Scenario-Specific Laboratory Panels
 const LAB_PANELS = {
   acute_coronary_syndrome: {
     ecgTitle: "12-LEAD TELEMETRY FINDINGS",
@@ -472,52 +365,47 @@ const screens = {
   report: document.getElementById("screen-report"),
 };
 
+// GÜNCELLENDİ: Case İçinde Profil Butonunu Gizle
 function showScreen(name) {
   Object.values(screens).forEach((el) => el.classList.remove("active"));
   screens[name].classList.add("active");
-
   const abortBtn = document.getElementById("btn-abort-session");
+  const profileBtn = document.getElementById("btn-profile");
+
   if (name === "sim") {
     abortBtn.style.display = "block";
+    if (profileBtn) profileBtn.style.display = "none";
     initECGAnimation();
   } else {
     abortBtn.style.display = "none";
+    if (profileBtn) profileBtn.style.display = "block";
     stopECGAnimation();
   }
 }
 
-// --- 1. Realistic Philips/GE Bedside Monitor Audio Engine ---
+// =========================================================================
+// 2. SES (AUDIO) VE EK YARDIMCILAR
+// =========================================================================
 function initAudioContext() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
 }
 
 function playBedsideBeep() {
   if (!isAudioEnabled || !audioCtx || currentHeartRate <= 30) return;
   try {
     const now = audioCtx.currentTime;
-
     let baseFreq = 976;
     if (currentSpO2 < 82) baseFreq = 540;
     else if (currentSpO2 < 88) baseFreq = 680;
     else if (currentSpO2 < 93) baseFreq = 820;
-
     if (currentHeartRate > 125) baseFreq += 40;
 
-    const osc1 = audioCtx.createOscillator();
-    const gain1 = audioCtx.createGain();
-    const osc2 = audioCtx.createOscillator();
-    const gain2 = audioCtx.createGain();
+    const osc1 = audioCtx.createOscillator(), gain1 = audioCtx.createGain();
+    const osc2 = audioCtx.createOscillator(), gain2 = audioCtx.createGain();
 
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(baseFreq, now);
-
-    osc2.type = "triangle";
-    osc2.frequency.setValueAtTime(baseFreq * 2, now);
+    osc1.type = "sine"; osc1.frequency.setValueAtTime(baseFreq, now);
+    osc2.type = "triangle"; osc2.frequency.setValueAtTime(baseFreq * 2, now);
 
     gain1.gain.setValueAtTime(0.001, now);
     gain1.gain.linearRampToValueAtTime(0.35, now + 0.004);
@@ -527,19 +415,12 @@ function playBedsideBeep() {
     gain2.gain.linearRampToValueAtTime(0.09, now + 0.004);
     gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
 
-    osc1.connect(gain1);
-    gain1.connect(audioCtx.destination);
+    osc1.connect(gain1); gain1.connect(audioCtx.destination);
+    osc2.connect(gain2); gain2.connect(audioCtx.destination);
 
-    osc2.connect(gain2);
-    gain2.connect(audioCtx.destination);
-
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 0.08);
-    osc2.stop(now + 0.08);
-  } catch (e) {
-    console.error("Audio telemetry error", e);
-  }
+    osc1.start(now); osc2.start(now);
+    osc1.stop(now + 0.08); osc2.stop(now + 0.08);
+  } catch (e) {}
 }
 
 function toggleAudio() {
@@ -548,52 +429,39 @@ function toggleAudio() {
   if (isAudioEnabled) initAudioContext();
 }
 
-// --- 2. Dynamic Scenario Loader ---
-async function loadScenarios() {
-  const container = document.getElementById("scenario-list");
-  if (!container) return;
-
+function playOutcomeAudio(isSuccess) {
+  if (!isAudioEnabled || !audioCtx) return;
   try {
-    const res = await fetch(apiUrl("/scenarios"));
-    if (!res.ok) throw new Error(`Scenario API returned ${res.status}`);
-
-    const scenarios = await res.json();
-    const scenarioEntries = Object.entries(scenarios).filter(
-      ([, val]) => val && typeof val === "object" && typeof val.label === "string"
-    );
-
-    if (scenarioEntries.length === 0) {
-      throw new Error("Scenario API returned an invalid payload");
+    const now = audioCtx.currentTime;
+    if (isSuccess) {
+      [523.25, 659.25, 783.99].forEach((freq, idx) => {
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.type = "sine"; osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+        gain.gain.setValueAtTime(0.001, now + idx * 0.12);
+        gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.12 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.12 + 0.5);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(now + idx * 0.12); osc.stop(now + idx * 0.12 + 0.55);
+      });
+    } else {
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.type = "sawtooth"; osc.frequency.setValueAtTime(820, now);
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+      gain.gain.setValueAtTime(0.25, now + 2.5);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + 3.0);
     }
+  } catch (e) {}
+}
 
-    container.innerHTML = "";
-
-    scenarioEntries.forEach(([key, val]) => {
-      const card = document.createElement("div");
-      card.className = `scenario-card ${val.enabled ? "featured" : "disabled"}`;
-      card.innerHTML = `
-        <div class="card-icon">${val.icon}</div>
-        <span class="scenario-tag ${val.enabled ? "live" : "lock"}">${val.tag}</span>
-        <h3>${val.label}</h3>
-        <p class="card-desc">${val.desc}</p>
-        <button class="btn-primary" ${val.enabled ? "" : "disabled"} onclick="openDifficultyModal('${key}')">
-          ${val.enabled ? "INITIALIZE CASE" : "COMING SOON"}
-        </button>
-      `;
-      container.appendChild(card);
-    });
-  } catch (err) {
-    console.error("Failed to load scenarios:", err);
-    container.innerHTML = `
-      <div class="scenario-card disabled">
-        <div class="card-icon">⚠️</div>
-        <span class="scenario-tag lock">BACKEND OFFLINE</span>
-        <h3>Cases could not be loaded</h3>
-        <p class="card-desc">Check the Render backend URL in config.js and confirm /scenarios is live.</p>
-        <button class="btn-primary" disabled>WAITING FOR API</button>
-      </div>
-    `;
-  }
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally { clearTimeout(timeout); }
 }
 
 function shuffleArray(array) {
@@ -606,48 +474,58 @@ function shuffleArray(array) {
   return shuffled;
 }
 
-// --- 3. Dynamic Quick Chips & Diagnostics Renderer ---
+function formatScenarioName(key) {
+  return String(key || "clinical_case").split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+}
+
+// =========================================================================
+// 3. UI RENDER METOTLARI (Lab, Quick Actions, Timeline)
+// =========================================================================
+async function loadScenarios() {
+  const container = document.getElementById("scenario-list");
+  if (!container) return;
+  try {
+    const res = await fetch(apiUrl("/scenarios"));
+    if (!res.ok) throw new Error(`Scenario API returned ${res.status}`);
+    const scenarios = await res.json();
+    const scenarioEntries = Object.entries(scenarios).filter(([, val]) => val && typeof val === "object" && typeof val.label === "string");
+    container.innerHTML = "";
+    scenarioEntries.forEach(([key, val]) => {
+      const card = document.createElement("div");
+      card.className = `scenario-card ${val.enabled ? "featured" : "disabled"}`;
+      card.innerHTML = `
+        <div class="card-icon">${val.icon}</div>
+        <span class="scenario-tag ${val.enabled ? "live" : "lock"}">${val.tag}</span>
+        <h3>${val.label}</h3>
+        <p class="card-desc">${val.desc}</p>
+        <button class="btn-primary" ${val.enabled ? "" : "disabled"} onclick="openDifficultyModal('${key}')">${val.enabled ? "INITIALIZE CASE" : "COMING SOON"}</button>
+      `;
+      container.appendChild(card);
+    });
+  } catch (err) {
+    container.innerHTML = `
+      <div class="scenario-card disabled"><div class="card-icon">⚠️</div><span class="scenario-tag lock">BACKEND OFFLINE</span>
+      <h3>Cases could not be loaded</h3><p class="card-desc">Check backend connection.</p><button class="btn-primary" disabled>WAITING</button></div>`;
+  }
+}
+
 function renderQuickActions(actions) {
-  let container = 
-    document.getElementById("quick-actions") || 
-    document.getElementById("quick-actions-container") ||
-    document.getElementById("actions-container") ||
-    document.getElementById("quick-chips") ||
-    document.querySelector(".quick-actions") ||
-    document.querySelector(".chip-container") ||
-    document.getElementById("quick-action-container");
-
-  const actionForm = document.getElementById("action-form");
-  if (!container && actionForm && actionForm.previousElementSibling) {
-    container = actionForm.previousElementSibling;
-  }
-
-  if (!container) {
-    console.error("Buton kapsayıcısı bulunamadı!");
-    return;
-  }
-
+  let container = document.getElementById("quick-action-container");
+  if (!container) return;
   if (selectedDifficulty === "hard") {
     container.innerHTML = "";
     container.classList.add("hidden");
     return;
   }
-
   container.classList.remove("hidden");
   container.innerHTML = "";
-
   const listToRender = actions || QUICK_ACTIONS[activeScenarioKey] || QUICK_ACTIONS.default || [];
-  const randomizedActions = shuffleArray(listToRender);
-
-  randomizedActions.forEach((action) => {
+  shuffleArray(listToRender).forEach((action) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `chip-btn ${action.warning ? "warning" : ""}`.trim();
     btn.textContent = action.label;
-    btn.onclick = (e) => {
-      e.preventDefault();
-      executeQuickAction(action.cmd);
-    };
+    btn.onclick = (e) => { e.preventDefault(); executeQuickAction(action.cmd); };
     container.appendChild(btn);
   });
 }
@@ -655,612 +533,31 @@ function renderQuickActions(actions) {
 function renderLabModal() {
   const container = document.getElementById("lab-content-container");
   if (!container) return;
-
   const data = LAB_PANELS[activeScenarioKey] || LAB_PANELS.default;
-  container.innerHTML = `
-    <div class="lab-box">
-      <h4>${data.ecgTitle}</h4>
-      <p>${data.ecg}</p>
-    </div>
-    <div class="lab-box">
-      <h4>${data.labsTitle}</h4>
-      <p>${data.labs}</p>
-    </div>
-  `;
+  container.innerHTML = `<div class="lab-box"><h4>${data.ecgTitle}</h4><p>${data.ecg}</p></div><div class="lab-box"><h4>${data.labsTitle}</h4><p>${data.labs}</p></div>`;
 }
 
-// --- 4. Start Session & Modal Handling ---
-async function openDifficultyModal(scenarioType) {
-  await startSession(scenarioType);
+function updateDDxBoard(turn) {
+  const container = document.getElementById("ddx-list-container");
+  if (!container) return;
+  const profile = DDX_PROFILES[activeScenarioKey] || DDX_PROFILES.default;
+  const hr = turn?.heart_rate || Math.round(currentHeartRate);
+  let p1 = Math.min(95, Math.max(50, profile[0].baseProb + (hr > 115 ? 4 : -3)));
+  let p2 = Math.max(4, Math.round((100 - p1) * 0.7));
+  let p3 = Math.max(1, 100 - p1 - p2);
+  const probs = [p1, p2, p3];
+  container.innerHTML = profile.map((item, idx) => `
+    <div class="ddx-item"><div class="ddx-labels"><span>${item.name}</span><span>${probs[idx]}%</span></div>
+    <div class="ddx-bar-bg"><div class="ddx-bar-fill ${item.color}" style="width: ${probs[idx]}%;"></div></div></div>`).join("");
 }
-
-async function startSession(scenarioType) {
-  activeScenarioKey = scenarioType || "acute_coronary_syndrome";
-  hasBreachedThreshold = false;
-  isRequestInProgress = false;
-  isEndingSession = false;
-  pendingScenarioKey = scenarioType;
-  pendingSessionReady = false;
-  stopGameLoop();
-  initAudioContext();
-
-  try {
-    const learnerId = loadLearnerProfile().learnerId;
-    const query = new URLSearchParams({ scenario_type: scenarioType });
-    if (learnerId) query.set("learner_id", learnerId);
-    const res = await fetchWithTimeout(apiUrl(`/session/start?${query.toString()}`), {
-      method: "POST",
-    });
-    if (!res.ok) throw new Error("Could not connect to backend server.");
-
-    const data = await res.json();
-    currentSessionId = data.session_id;
-    sessionActionLogs = [];
-    sessionStartTime = Date.now();
-
-    document.getElementById("chat-log").innerHTML = "";
-
-    const age = data.turn?.age || 54;
-    const gender = data.turn?.gender || "Male";
-    const diagnosis = data.turn?.primary_diagnosis || "Acute Clinical Inception";
-    const hr = data.turn?.heart_rate || 110;
-    const bp = data.turn?.blood_pressure || "150/95";
-    const spo2 = data.turn?.spo2 || 92;
-    const note = data.turn?.system_note || "Patient admitted to the resuscitation bay.";
-
-    currentHeartRate = hr;
-    currentSpO2 = spo2;
-    currentBP = bp;
-    currentConsciousness = data.turn?.consciousness || "Alert";
-    minHeartRate = data.turn?.min_heart_rate !== undefined ? data.turn.min_heart_rate : 35;
-    maxHeartRate = data.turn?.max_heart_rate !== undefined ? data.turn.max_heart_rate : 185;
-    heartRateDrift = data.turn?.heart_rate_drift !== undefined ? data.turn.heart_rate_drift : 0.4;
-
-    document.getElementById("patient-display-name").textContent = `${age} Y/O ${gender}`;
-    document.getElementById("patient-age").textContent = age;
-    document.getElementById("patient-gender").textContent = String(gender).toUpperCase();
-    document.getElementById("patient-tani").textContent = diagnosis;
-    document.getElementById("vital-spo2").textContent = spo2;
-
-    document.getElementById("modal-info").textContent = note;
-    document.getElementById("modal-age-gender").textContent = `${age} Y/O / ${gender}`;
-    document.getElementById("modal-tani").textContent = diagnosis;
-    document.getElementById("modal-nabiz").textContent = hr;
-    document.getElementById("modal-tansiyon").textContent = bp;
-
-    document.getElementById("difficulty-modal-info").textContent = note;
-    document.getElementById("difficulty-age-gender").textContent = `${age} Y/O / ${gender}`;
-    document.getElementById("difficulty-tani").textContent = diagnosis;
-    document.getElementById("difficulty-nabiz").textContent = hr;
-    document.getElementById("difficulty-tansiyon").textContent = bp;
-
-    renderLabModal();
-
-    logTimelineEvent("EMS Admission", `Patient admitted with ${diagnosis}`);
-    renderTurn(data.turn, null, false);
-    pendingSessionReady = true;
-    document.getElementById("difficulty-modal").classList.add("active");
-  } catch (err) {
-    alert("Initialization Error: " + err.message);
-  }
-}
-
-function closeDifficultyModal() {
-  currentSessionId = null;
-  pendingScenarioKey = null;
-  pendingSessionReady = false;
-  hasBreachedThreshold = false;
-  isRequestInProgress = false;
-  isEndingSession = false;
-  stopGameLoop();
-  document.getElementById("difficulty-modal")?.classList.remove("active");
-}
-
-function confirmDifficultySelection(difficulty) {
-  if (!pendingSessionReady || !currentSessionId) return;
-  selectedDifficulty = difficulty === "hard" ? "hard" : "easy";
-  document.getElementById("difficulty-modal")?.classList.remove("active");
-  renderQuickActions();
-  initAudioContext();
-  showScreen("sim");
-  startGameLoop();
-  pendingScenarioKey = null;
-  pendingSessionReady = false;
-}
-
-function closePatientModal() {
-  document.getElementById("patient-modal").classList.remove("active");
-  initAudioContext();
-  showScreen("sim");
-  startGameLoop();
-}
-
-// --- 5. Ticking Simulation Engine ---
-function stopGameLoop() {
-  if (gameLoopInterval !== null) {
-    clearInterval(gameLoopInterval);
-    gameLoopInterval = null;
-  }
-}
-
-function startGameLoop() {
-  stopGameLoop();
-  timeLeft = TURN_DURATION;
-  updateTimerUI();
-
-  gameLoopInterval = setInterval(() => {
-    if (isRequestInProgress) return;
-
-    timeLeft--;
-    updateTimerUI();
-
-    currentHeartRate += heartRateDrift;
-    const roundedHR = Math.round(currentHeartRate);
-    const hrEl = document.getElementById("vital-nabiz");
-    if (hrEl) hrEl.textContent = roundedHR;
-
-    // Critical Safety Threshold Detection
-    if ((roundedHR <= minHeartRate || roundedHR >= maxHeartRate) && !hasBreachedThreshold) {
-      hasBreachedThreshold = true;
-      stopGameLoop();
-      logTimelineEvent("Threshold Breach", `Heart rate critical (${roundedHR} bpm)`);
-      sendActionToServer(`[CRITICAL THRESHOLD BREACHED: Heart Rate reached ${roundedHR} bpm! Patient entering cardiovascular collapse!]`);
-    } 
-    // 30s Timeout Detection
-    else if (timeLeft <= 0) {
-      stopGameLoop();
-      logTimelineEvent("Timeout Error", "30s elapsed with zero interventions");
-      sendActionToServer("[TIMEOUT: No clinical action taken for 30 seconds. Patient deteriorating.]");
-    }
-  }, 1000);
-}
-
-function updateTimerUI() {
-  const timerDisplay = document.getElementById("timer-display");
-  if (timerDisplay) {
-    timerDisplay.textContent = timeLeft < 10 ? `0${timeLeft}` : timeLeft;
-  }
-}
-
-function setInteractionsDisabled(disabled) {
-  const submitBtn = document.getElementById("submit-btn");
-  if (submitBtn) submitBtn.disabled = disabled;
-
-  const input = document.getElementById("action-input");
-  if (input) input.disabled = disabled;
-
-  const chipBtns = document.querySelectorAll(".chip-btn");
-  chipBtns.forEach((btn) => (btn.disabled = disabled));
-
-  const quickActionBar = document.getElementById("quick-action-container");
-  if (quickActionBar) quickActionBar.classList.toggle("is-disabled", disabled);
-}
-
-async function fetchWithTimeout(url, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function buildOutcomeCopy(report) {
-  const badge = String(report?.status_badge || "");
-  const errors = String(report?.errors || "");
-  const score = Number(report?.score || 0);
-  const hasFailure = /fail|arrest|critical/i.test(badge);
-  const hasDefinitiveCareGap = /cath|pci|reperfusion|p2y12|heparin|anticoag/i.test(errors);
-
-  if (hasFailure || score < 50) {
-    return {
-      successAudio: false,
-      color: "#ef4444",
-      badge: "🚨 CRITICAL FAILURE / CARDIAC ARREST",
-      icon: "⚡📉",
-      title: "Patient Decompensated",
-      desc:
-        errors ||
-        "Critical stabilization steps were missed or delayed, resulting in severe deterioration.",
-    };
-  }
-
-  if (score < 80 || hasDefinitiveCareGap) {
-    return {
-      successAudio: true,
-      color: "#f59e0b",
-      badge: "⚠️ PARTIAL STABILIZATION - DEFINITIVE CARE NEEDED",
-      icon: "🫀📋",
-      title: "Initial Stabilization Achieved",
-      desc:
-        "Initial bedside interventions improved the immediate risk, but the case still requires definitive protocol completion. Review the full evaluation for missed reperfusion or medication steps.",
-    };
-  }
-
-  return {
-    successAudio: true,
-    color: "#10b981",
-    badge: "✅ CLINICAL STABILIZATION ACHIEVED",
-    icon: "🫀✨",
-    title: "Patient Successfully Stabilized",
-    desc:
-      "Timely and protocol-adherent interventions addressed immediate instability and definitive care was appropriately activated.",
-  };
-}
-
-function defaultLearnerProfile() {
-  return {
-    isSignedIn: false,
-    learnerId: null,
-    learnerName: "",
-    learnerTrack: "Emergency Medicine",
-    profileSource: "local",
-    completedCases: [],
-  };
-}
-
-function normalizeLearnerProfile(profile) {
-  const base = defaultLearnerProfile();
-  if (!profile || typeof profile !== "object") return base;
-  return {
-    ...base,
-    ...profile,
-    learnerName: String(profile.learnerName || "").trim(),
-    learnerTrack: String(profile.learnerTrack || profile.learnerRole || base.learnerTrack).trim(),
-    learnerId: profile.learnerId || profile.learner_id || null,
-    profileSource: profile.profileSource || base.profileSource,
-    completedCases: Array.isArray(profile.completedCases) ? profile.completedCases : [],
-    isSignedIn: Boolean(profile.isSignedIn && String(profile.learnerName || "").trim()),
-  };
-}
-
-function profileFromApi(payload, fallback = loadLearnerProfile()) {
-  const remoteCases = Array.isArray(payload?.recent_cases) ? payload.recent_cases : [];
-  return normalizeLearnerProfile({
-    ...fallback,
-    isSignedIn: true,
-    learnerId: payload?.learner_id || fallback.learnerId,
-    learnerName: payload?.display_name || fallback.learnerName,
-    learnerTrack: payload?.training_track || fallback.learnerTrack,
-    profileSource: "database",
-    completedCases: remoteCases.map((item) => ({
-      sessionId: item.session_id,
-      scenario: item.scenario,
-      score: Number(item.score || 0),
-      badge: String(item.badge || "COMPLETED"),
-      criteria: item.criteria || {},
-      errors: String(item.errors || ""),
-      suggestions: String(item.suggestions || ""),
-      completedAt: item.completed_at,
-    })),
-    remoteSummary: {
-      completedCases: Number(payload?.completed_cases || remoteCases.length || 0),
-      averageScore: payload?.average_score ?? null,
-      focusArea: payload?.focus_area || null,
-      recommendations: Array.isArray(payload?.recommendations) ? payload.recommendations : null,
-    },
-  });
-}
-
-function loadLearnerProfile() {
-  if (memoryLearnerProfile) return memoryLearnerProfile;
-  try {
-    const stored = JSON.parse(window.localStorage?.getItem(LEARNER_PROFILE_KEY) || "null");
-    if (stored) {
-      memoryLearnerProfile = normalizeLearnerProfile(stored);
-      return memoryLearnerProfile;
-    }
-  } catch (_) {}
-  memoryLearnerProfile = defaultLearnerProfile();
-  return memoryLearnerProfile;
-}
-
-function saveLearnerProfile(profile) {
-  memoryLearnerProfile = profile;
-  try {
-    window.localStorage?.setItem(LEARNER_PROFILE_KEY, JSON.stringify(profile));
-  } catch (_) {}
-}
-
-function refreshLearnerIdentityUI() {
-  const profile = loadLearnerProfile();
-  const navName = document.getElementById("nav-learner-name");
-  const navRole = document.getElementById("nav-learner-role");
-  const profileName = document.getElementById("profile-learner-name");
-  const profileTrack = document.getElementById("profile-learner-track");
-
-  if (navName) navName.textContent = signedInLearnerName(profile);
-  if (navRole) navRole.textContent = signedInLearnerTrack(profile);
-  if (profileName) profileName.textContent = signedInLearnerName(profile);
-  if (profileTrack) profileTrack.textContent = signedInLearnerTrack(profile);
-}
-
-function openLearnerLogin() {
-  const profile = loadLearnerProfile();
-  const nameInput = document.getElementById("learner-name-input");
-  const trackSelect = document.getElementById("learner-track-select");
-
-  if (nameInput && profile.learnerName) nameInput.value = profile.learnerName;
-  if (trackSelect && profile.learnerTrack) trackSelect.value = profile.learnerTrack;
-
-  document.getElementById("learner-login-modal")?.classList.add("active");
-  setTimeout(() => nameInput?.focus(), 50);
-}
-
-function closeLearnerLogin() {
-  document.getElementById("learner-login-modal")?.classList.remove("active");
-}
-
-async function handleLearnerLogin(event) {
-  event.preventDefault();
-  const nameInput = document.getElementById("learner-name-input");
-  const trackSelect = document.getElementById("learner-track-select");
-  const learnerName = String(nameInput?.value || "").trim() || "Dr. On-Duty Resident";
-  const learnerTrack = String(trackSelect?.value || "Emergency Medicine").trim();
-  const previous = loadLearnerProfile();
-
-  const localProfile = {
-    ...previous,
-    isSignedIn: true,
-    learnerName,
-    learnerTrack,
-  };
-
-  try {
-    const res = await fetchWithTimeout(apiUrl("/learners"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        learner_id: previous.learnerId,
-        display_name: learnerName,
-        training_track: learnerTrack,
-      }),
-    });
-    if (!res.ok) throw new Error("Learner profile API failed");
-    const remoteProfile = profileFromApi(await res.json(), localProfile);
-    saveLearnerProfile(remoteProfile);
-  } catch (err) {
-    console.warn("Learner profile will use local storage fallback:", err);
-    saveLearnerProfile({ ...localProfile, profileSource: "local" });
-  }
-
-  refreshLearnerIdentityUI();
-  renderLearnerProfile();
-  closeLearnerLogin();
-}
-
-function signedInLearnerName(profile = loadLearnerProfile()) {
-  return profile.isSignedIn ? profile.learnerName : "Guest Learner";
-}
-
-function signedInLearnerTrack(profile = loadLearnerProfile()) {
-  if (!profile.isSignedIn) return "Not signed in";
-  const sourceLabel = profile.profileSource === "database" ? "Database synced" : "Local session";
-  return `${profile.learnerTrack} · ${sourceLabel}`;
-}
-
-function formatScenarioName(key) {
-  return String(key || "clinical_case")
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function lowestCriteriaKey(criteria = {}) {
-  const entries = Object.entries(criteria);
-  if (!entries.length) return "protocol_adherence";
-  return entries.reduce((lowest, current) => {
-    const currentVal = Number(current[1] ?? 25);
-    const lowestVal = Number(lowest[1] ?? 25);
-    return currentVal < lowestVal ? current : lowest;
-  })[0];
-}
-
-function criteriaLabel(key) {
-  const labels = {
-    protocol_adherence: "Protocol",
-    diagnostic_accuracy: "Diagnosis",
-    patient_safety: "Safety",
-    pharmacology_precision: "Pharmacology",
-  };
-  return labels[key] || "Protocol";
-}
-
-function recommendationForFocus(focusKey, latestCase) {
-  const scenario = latestCase?.scenario || "acute_coronary_syndrome";
-  const score = Number(latestCase?.score || 0);
-  const scenarioName = formatScenarioName(scenario);
-
-  if (score >= 90) {
-    return `Advance to Expert Mode in ${scenarioName} or choose a different emergency case to test transfer of judgment.`;
-  }
-
-  const recs = {
-    protocol_adherence: `Repeat ${scenarioName} and focus on completing the definitive protocol bundle before ending the case.`,
-    diagnostic_accuracy: `Practice diagnostic confirmation in ${scenarioName}: order the decisive test early and act on the result without delay.`,
-    patient_safety: `Run a respiratory or shock case next and prioritize airway, oxygenation, circulation, and contraindication checks.`,
-    pharmacology_precision: `Review medication timing and dosing, then retry ${scenarioName} in Expert Mode without quick action prompts.`,
-  };
-  return recs[focusKey] || recs.protocol_adherence;
-}
-
-function buildLearnerRecommendations(profile) {
-  if (Array.isArray(profile.remoteSummary?.recommendations)) {
-    return profile.remoteSummary.recommendations.slice(0, 3);
-  }
-
-  const cases = profile.completedCases || [];
-  if (!cases.length) {
-    return [
-      "Complete your first simulation to unlock adaptive recommendations.",
-      "Start with Guided Mode, then repeat the same case in Expert Mode.",
-      "Recommended first case: Acute Coronary Syndrome (STEMI).",
-    ];
-  }
-
-  const latest = cases[0];
-  const focusKey = lowestCriteriaKey(latest.criteria || {});
-  const avgScore = Math.round(cases.reduce((sum, item) => sum + Number(item.score || 0), 0) / cases.length);
-  const recommendations = [recommendationForFocus(focusKey, latest)];
-
-  if (avgScore < 75) {
-    recommendations.push("Use Guided Mode for one more run, then compare your timeline against the final feedback.");
-  } else {
-    recommendations.push("Move one frequent case into Expert Mode to remove quick action support.");
-  }
-
-  if (/cath|pci|reperfusion|p2y12|heparin|anticoag/i.test(latest.errors || "")) {
-    recommendations.push("STEMI focus: activate reperfusion early and complete antiplatelet plus anticoagulation steps.");
-  } else if (/airway|oxygen|spo2|ventilat/i.test(latest.errors || "")) {
-    recommendations.push("Respiratory focus: stabilize oxygenation before lower-priority diagnostics.");
-  } else {
-    recommendations.push("Next challenge: choose a different specialty case to test whether the same decision pattern transfers.");
-  }
-
-  return recommendations.slice(0, 3);
-}
-
-function updateLearnerProfile(report) {
-  if (!report) return;
-  const profile = loadLearnerProfile();
-  const caseRecord = {
-    sessionId: currentSessionId,
-    scenario: activeScenarioKey,
-    score: Number(report.score || 0),
-    badge: String(report.status_badge || "COMPLETED"),
-    criteria: report.criteria || {},
-    strengths: String(report.strengths || ""),
-    errors: String(report.errors || ""),
-    suggestions: String(report.suggestions || ""),
-    completedAt: new Date().toISOString(),
-  };
-
-  const previousCases = (profile.completedCases || []).filter(
-    (item) => !currentSessionId || item.sessionId !== currentSessionId
-  );
-  profile.completedCases = [caseRecord, ...previousCases].slice(0, MAX_PROFILE_HISTORY);
-  saveLearnerProfile(profile);
-  renderLearnerProfile();
-  refreshLearnerProfileFromServer();
-}
-
-async function refreshLearnerProfileFromServer() {
-  const profile = loadLearnerProfile();
-  if (!profile.isSignedIn || !profile.learnerId) return;
-
-  try {
-    const res = await fetchWithTimeout(apiUrl(`/learners/${profile.learnerId}/profile`), {
-      method: "GET",
-    });
-    if (!res.ok) throw new Error("Learner profile refresh failed");
-    saveLearnerProfile(profileFromApi(await res.json(), profile));
-    renderLearnerProfile();
-  } catch (err) {
-    console.warn("Learner profile refresh used local fallback:", err);
-  }
-}
-
-function renderLearnerProfile() {
-  const profile = loadLearnerProfile();
-  const cases = profile.completedCases || [];
-  const caseCountEl = document.getElementById("profile-case-count");
-  const avgScoreEl = document.getElementById("profile-avg-score");
-  const focusEl = document.getElementById("profile-focus-area");
-  const recContainer = document.getElementById("profile-recommendations");
-  const historyContainer = document.getElementById("profile-history");
-
-  const avgScore = profile.remoteSummary?.averageScore ?? (
-    cases.length
-      ? Math.round(cases.reduce((sum, item) => sum + Number(item.score || 0), 0) / cases.length)
-      : null
-  );
-  const focusKey = cases.length ? lowestCriteriaKey(cases[0].criteria || {}) : "protocol_adherence";
-  const focusLabel = profile.remoteSummary?.focusArea || criteriaLabel(focusKey);
-
-  refreshLearnerIdentityUI();
-  if (caseCountEl) caseCountEl.textContent = profile.remoteSummary?.completedCases ?? cases.length;
-  if (avgScoreEl) avgScoreEl.textContent = avgScore === null ? "--" : `${avgScore}/100`;
-  if (focusEl) focusEl.textContent = focusLabel;
-
-  if (recContainer) {
-    recContainer.textContent = "";
-    buildLearnerRecommendations(profile).forEach((text) => {
-      const item = document.createElement("div");
-      item.className = "profile-rec-item";
-      item.textContent = text;
-      recContainer.appendChild(item);
-    });
-  }
-
-  if (historyContainer) {
-    historyContainer.textContent = "";
-    if (!cases.length) {
-      const empty = document.createElement("p");
-      empty.className = "profile-empty";
-      empty.textContent = "No completed simulations yet. Finish a case to build your learning profile.";
-      historyContainer.appendChild(empty);
-    } else {
-      cases.slice(0, 4).forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "profile-history-item";
-
-        const detail = document.createElement("div");
-        const title = document.createElement("strong");
-        title.textContent = formatScenarioName(item.scenario);
-        const badge = document.createElement("span");
-        badge.textContent = item.badge;
-        detail.append(title, badge);
-
-        const score = document.createElement("strong");
-        score.textContent = `${item.score}/100`;
-        row.append(detail, score);
-        historyContainer.appendChild(row);
-      });
-    }
-  }
-}
-
-function openLearnerProfile() {
-  if (!loadLearnerProfile().isSignedIn) {
-    openLearnerLogin();
-    return;
-  }
-  renderLearnerProfile();
-  document.getElementById("learner-profile-modal")?.classList.add("active");
-}
-
-function closeLearnerProfile() {
-  document.getElementById("learner-profile-modal")?.classList.remove("active");
-}
-
-function initializeLearnerSession() {
-  refreshLearnerIdentityUI();
-  renderLearnerProfile();
-  if (!loadLearnerProfile().isSignedIn) {
-    openLearnerLogin();
-  }
-}
-
-// --- 6. Turn Rendering & DDx Updates ---
-let lastSystemNote = "";
 
 function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   const log = document.getElementById("chat-log");
-
-  if (userMessage) {
-    appendLogEntry("user", userMessage);
-    hasBreachedThreshold = false;
-  }
-
-  if (turn?.system_note && turn.system_note.trim() !== "" && turn.system_note !== lastSystemNote) {
+  if (userMessage) { appendLogEntry("user", userMessage); hasBreachedThreshold = false; }
+  if (turn?.system_note && turn.system_note.trim() !== "") {
     appendLogEntry("sistem", turn.system_note);
-    const doctorNoteEl = document.getElementById("doctor-note-text");
-    if (doctorNoteEl) doctorNoteEl.textContent = turn.system_note;
-    lastSystemNote = turn.system_note;
+    document.getElementById("doctor-note-text").textContent = turn.system_note;
   }
-
   if (turn?.patient_dialogue && turn.patient_dialogue.trim() !== "" && turn.consciousness !== "Unresponsive") {
     appendLogEntry("hasta", turn.patient_dialogue);
   }
@@ -1283,8 +580,7 @@ function renderTurn(turn, userMessage = null, shouldStartTimer = true) {
   log.scrollTop = log.scrollHeight;
 
   if (turn?.case_completed === true) {
-    stopGameLoop();
-    finishSession(); 
+    stopGameLoop(); finishSession();
   } else if (shouldStartTimer) {
     startGameLoop();
   }
@@ -1296,233 +592,493 @@ function appendLogEntry(type, text) {
   entry.className = `log-entry ${type}`;
   entry.textContent = text;
   log.appendChild(entry);
-  requestAnimationFrame(() => {
-    log.scrollTop = log.scrollHeight;
+  requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+}
+
+function renderTimelineReplay() {
+  const container = document.getElementById("timeline-events");
+  if (!container) return;
+  container.innerHTML = "";
+  sessionActionLogs.forEach((item) => {
+    let typeClass = "primary", icon = "🩺";
+    if (item.tag.includes("Timeout")) { typeClass = "danger"; icon = "⌛"; } 
+    else if (item.tag.includes("Breach")) { typeClass = "danger"; icon = "⚡"; } 
+    else if (item.tag.includes("EMS") || item.tag.includes("Admission")) { typeClass = "primary"; icon = "🚑"; } 
+    else if (item.tag.includes("Order") || item.tag.includes("Doctor")) { typeClass = "success"; icon = "💊"; }
+    
+    const row = document.createElement("div");
+    row.className = `timeline-item ${typeClass}`;
+    row.innerHTML = `<span class="timeline-badge">${icon} +${item.time}</span><div class="timeline-body"><strong class="timeline-tag">${item.tag}:</strong><span class="timeline-action">${item.desc}</span></div>`;
+    container.appendChild(row);
   });
 }
 
-function updateDDxBoard(turn) {
-  const container = document.getElementById("ddx-list-container");
-  if (!container) return;
-
-  const profile = DDX_PROFILES[activeScenarioKey] || DDX_PROFILES.default;
-  const hr = turn?.heart_rate || Math.round(currentHeartRate);
-
-  let p1 = Math.min(95, Math.max(50, profile[0].baseProb + (hr > 115 ? 4 : -3)));
-  let p2 = Math.max(4, Math.round((100 - p1) * 0.7));
-  let p3 = Math.max(1, 100 - p1 - p2);
-
-  const probs = [p1, p2, p3];
-
-  container.innerHTML = profile
-    .map(
-      (item, idx) => `
-    <div class="ddx-item">
-      <div class="ddx-labels">
-        <span>${item.name}</span>
-        <span>${probs[idx]}%</span>
-      </div>
-      <div class="ddx-bar-bg">
-        <div class="ddx-bar-fill ${item.color}" style="width: ${probs[idx]}%;"></div>
-      </div>
-    </div>
-  `
-    )
-    .join("");
+function drawRadarChart(criteria = {}) {
+  const canvas = document.getElementById("radar-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const cx = canvas.width / 2, cy = canvas.height / 2, radius = 88;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const axes = [
+    { label: "Protocol Adherence", val: criteria?.protocol_adherence ?? 18 }, { label: "Diagnostic Accuracy", val: criteria?.diagnostic_accuracy ?? 18 },
+    { label: "Patient Safety", val: criteria?.patient_safety ?? 18 }, { label: "Pharmacology", val: criteria?.pharmacology_precision ?? 18 },
+  ];
+  for (let r = 0.25; r <= 1.0; r += 0.25) {
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const angle = (Math.PI * 2 / 4) * i - Math.PI / 2;
+      const x = cx + Math.cos(angle) * (radius * r), y = cy + Math.sin(angle) * (radius * r);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.strokeStyle = "rgba(56, 189, 248, 0.15)"; ctx.stroke();
+  }
+  ctx.fillStyle = "#94a3b8"; ctx.font = "bold 9.5px 'Plus Jakarta Sans'"; ctx.textAlign = "center";
+  for (let i = 0; i < 4; i++) {
+    const angle = (Math.PI * 2 / 4) * i - Math.PI / 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)"; ctx.stroke();
+    ctx.fillText(`${axes[i].label} (${axes[i].val}/25)`, cx + Math.cos(angle) * (radius + 20), cy + Math.sin(angle) * (radius + 14));
+  }
+  ctx.beginPath();
+  for (let i = 0; i < 4; i++) {
+    const scoreRatio = Math.min(25, Math.max(0, axes[i].val)) / 25;
+    const angle = (Math.PI * 2 / 4) * i - Math.PI / 2;
+    const x = cx + Math.cos(angle) * (radius * scoreRatio), y = cy + Math.sin(angle) * (radius * scoreRatio);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "rgba(56, 189, 248, 0.35)"; ctx.fill();
+  ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2.2; ctx.shadowBlur = 8; ctx.shadowColor = "#38bdf8"; ctx.stroke();
 }
 
-// --- 7. Quick Action Execution & Dispatch ---
-function executeQuickAction(commandText) {
-  if (isRequestInProgress || !currentSessionId || isEndingSession) return;
+// =========================================================================
+// 4. KULLANICI & PROFIL SİSTEMİ
+// =========================================================================
+function defaultLearnerProfile() {
+  return { isSignedIn: false, username: null, learnerId: null, learnerName: "", learnerTrack: "Emergency Medicine", profileSource: "local", completedCases: [] };
+}
+
+function normalizeLearnerProfile(profile) {
+  const base = defaultLearnerProfile();
+  if (!profile || typeof profile !== "object") return base;
+  return {
+    ...base, ...profile,
+    username: String(profile.username || "").trim(),
+    learnerName: String(profile.learnerName || "").trim(),
+    learnerTrack: String(profile.learnerTrack || profile.learnerRole || base.learnerTrack).trim(),
+    learnerId: profile.learnerId || profile.learner_id || null,
+    profileSource: profile.profileSource || base.profileSource,
+    completedCases: Array.isArray(profile.completedCases) ? profile.completedCases : [],
+    isSignedIn: Boolean(profile.isSignedIn && String(profile.username || "").trim()),
+  };
+}
+
+function profileFromApi(payload, fallback = loadLearnerProfile()) {
+  const remoteCases = Array.isArray(payload?.recent_cases) ? payload.recent_cases : [];
+  return normalizeLearnerProfile({
+    ...fallback,
+    isSignedIn: true,
+    username: payload?.username || fallback.username,
+    learnerId: payload?.learner_id || fallback.learnerId,
+    learnerName: payload?.display_name || fallback.learnerName,
+    learnerTrack: payload?.training_track || fallback.learnerTrack,
+    profileSource: "database",
+    completedCases: remoteCases.map((item) => ({
+      sessionId: item.session_id, scenario: item.scenario, scenarioTitle: item.scenario_title,
+      score: Number(item.score || 0), badge: String(item.badge || "COMPLETED"), criteria: item.criteria || {},
+      errors: String(item.errors || ""), suggestions: String(item.suggestions || ""), completedAt: item.completed_at,
+    })),
+    remoteSummary: {
+      completedCases: Number(payload?.completed_cases || remoteCases.length || 0),
+      totalCases: Number(payload?.total_available_cases || 20),
+      averageScore: payload?.average_score ?? null,
+      focusArea: payload?.focus_area || null,
+      recommendations: Array.isArray(payload?.recommendations) ? payload.recommendations : null,
+      studyTopics: Array.isArray(payload?.study_topics) ? payload.study_topics : null,
+    },
+  });
+}
+
+function loadLearnerProfile() {
+  if (memoryLearnerProfile) return memoryLearnerProfile;
+  try {
+    const stored = JSON.parse(window.localStorage?.getItem(LEARNER_PROFILE_KEY) || "null");
+    if (stored) { memoryLearnerProfile = normalizeLearnerProfile(stored); return memoryLearnerProfile; }
+  } catch (_) {}
+  memoryLearnerProfile = defaultLearnerProfile();
+  return memoryLearnerProfile;
+}
+
+function saveLearnerProfile(profile) {
+  memoryLearnerProfile = profile;
+  try { window.localStorage?.setItem(LEARNER_PROFILE_KEY, JSON.stringify(profile)); } catch (_) {}
+}
+
+function refreshLearnerIdentityUI() {
+  const profile = loadLearnerProfile();
+  const navName = document.getElementById("nav-learner-name"), navRole = document.getElementById("nav-learner-role");
+  const profileName = document.getElementById("profile-learner-name"), profileTrack = document.getElementById("profile-learner-track");
+  const dName = profile.isSignedIn ? profile.learnerName : "Guest Learner";
+  const dTrack = profile.isSignedIn ? `${profile.learnerTrack} · ${profile.profileSource === "database" ? "Database" : "Local"}` : "Not signed in";
   
-  stopGameLoop();
-  logTimelineEvent("Doctor Order", commandText);
-  sendActionToServer(commandText);
+  if (navName) navName.textContent = dName;
+  if (navRole) navRole.textContent = dTrack;
+  if (profileName) profileName.textContent = dName;
+  if (profileTrack) profileTrack.textContent = dTrack;
 }
 
-// KESİN ÇÖZÜM: 2. Kez basıldığında logların ve döngünün kilitlenmesini önleyen, tamamen İngilizce dinamik geri bildirimli sendActionToServer
-async function sendActionToServer(message) {
-  if (!currentSessionId || isEndingSession) return;
-  if (isRequestInProgress) return; // Çift tıklama kilitlenmesini engeller
+function openLearnerLogin() {
+  const profile = loadLearnerProfile();
+  const userInp = document.getElementById("learner-username-input"), trackSel = document.getElementById("learner-track-select");
+  if (userInp && profile.username) userInp.value = profile.username;
+  if (trackSel && profile.learnerTrack) trackSel.value = profile.learnerTrack;
+  document.getElementById("learner-login-modal")?.classList.add("active");
+  setTimeout(() => userInp?.focus(), 50);
+}
 
-  isRequestInProgress = true;
-  stopGameLoop();
-  setInteractionsDisabled(true);
+function closeLearnerLogin() { document.getElementById("learner-login-modal")?.classList.remove("active"); }
 
-  // 1. Kullanıcının hamlesini anında ekrana basıyoruz
-  if (!message.startsWith("[")) {
-    appendLogEntry("user", message);
+function logoutLearner() {
+  memoryLearnerProfile = defaultLearnerProfile();
+  window.localStorage.removeItem(LEARNER_PROFILE_KEY);
+  refreshLearnerIdentityUI();
+  closeLearnerProfile();
+}
+
+async function handleLearnerLogin(event) {
+  event.preventDefault();
+  const emailInp = document.getElementById("learner-email-input");
+  const userInp = document.getElementById("learner-username-input");
+  const passInp = document.getElementById("learner-password-input");
+  const passConf = document.getElementById("learner-password-confirm");
+  const trackSel = document.getElementById("learner-track-select");
+  
+  if (passInp.value !== passConf.value) {
+    alert("Passwords do not match!");
+    return;
   }
 
-  // 2. Müdahale türüne göre akıllı İngilizce dinamik yükleniyor mesajı belirleme
-  let loadingText = "⏳ Preparing medication & executing clinical order...";
-  const lowerMsg = message.toLowerCase();
-  if (lowerMsg.includes("ecg") || lowerMsg.includes("ct") || lowerMsg.includes("labs") || lowerMsg.includes("xray") || lowerMsg.includes("fast") || lowerMsg.includes("blood gas")) {
-    loadingText = "⏳ Ordering stat diagnostics & analyzing clinical data...";
-  } else if (lowerMsg.includes("tube") || lowerMsg.includes("bvm") || lowerMsg.includes("decompression") || lowerMsg.includes("intubation") || lowerMsg.includes("bipap")) {
-    loadingText = "⏳ Preparing airway & procedural equipment...";
-  } else if (lowerMsg.includes("oxygen") || lowerMsg.includes("o2")) {
-    loadingText = "⏳ Adjusting respiratory support & oxygen flow...";
+  const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+  if (!passRegex.test(passInp.value)) {
+    alert("Password must contain at least 1 uppercase, 1 lowercase, and 1 number.");
+    return;
   }
 
-  // 3. Geçici Yükleniyor (Loading) Durumu Log Ekranına Ekleniyor
-  const log = document.getElementById("chat-log");
-  const loadingId = "loading-" + Date.now();
-  const loadingEntry = document.createElement("div");
-  loadingEntry.id = loadingId;
-  loadingEntry.className = "log-entry sistem clinical-loading";
-  loadingEntry.innerHTML = `
-    <span class="loading-pulse" aria-hidden="true"></span>
-    <span class="loading-copy">${loadingText}</span>
-    <span class="loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-  `;
-  log.appendChild(loadingEntry);
-  log.scrollTop = log.scrollHeight;
+  const username = String(userInp.value).trim().toLowerCase();
+  const email = String(emailInp.value).trim().toLowerCase();
+  const password = passInp.value;
+  const learnerTrack = String(trackSel.value || "Emergency Medicine").trim();
+  const localProfile = { ...loadLearnerProfile(), isSignedIn: true, username, learnerName: username, learnerTrack };
 
   try {
-    const payload = {
-      message: message,
-      current_hr: Math.round(currentHeartRate),
-      current_spo2: currentSpO2,
-      current_bp: currentBP,
-    };
-
-    const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/act`), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    const res = await fetchWithTimeout(apiUrl("/learners"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, email, password, training_track: learnerTrack }),
     });
-
     if (!res.ok) {
-      let detail = "Backend connection failed";
-      try {
-        const errorPayload = await res.json();
-        detail = errorPayload.detail || detail;
-      } catch (_) {}
-      throw new Error(detail);
+      if (res.status === 401) throw new Error("Incorrect Password.");
+      throw new Error("API failed");
     }
+    saveLearnerProfile(profileFromApi(await res.json(), localProfile));
+    passInp.value = ""; passConf.value = "";
+  } catch (err) { 
+    alert(err.message);
+    return;
+  }
 
-    const turn = await res.json();
-    
-    // 4. Backend'den cevap gelince geçici Yükleniyor ibaresini kaldır
-    const loadingEl = document.getElementById(loadingId);
-    if (loadingEl) loadingEl.remove();
+  refreshLearnerIdentityUI(); renderLearnerProfile(); closeLearnerLogin();
+  if (window.pendingClaimSessionId) await processSessionClaim(window.pendingClaimSessionId, username);
+}
 
-    renderTurn(turn, null, true);
+function promptClaimSession() {
+  window.pendingClaimSessionId = currentSessionId;
+  openLearnerLogin();
+}
+
+async function processSessionClaim(sessionId, username) {
+  window.pendingClaimSessionId = null;
+  const btn = document.getElementById("claim-session-btn");
+  if(btn) btn.textContent = "Saving...";
+  try {
+    const res = await fetchWithTimeout(apiUrl(`/session/${sessionId}/claim?username=${username}`), { method: "POST" });
+    if(res.ok) {
+      saveLearnerProfile(profileFromApi(await res.json(), loadLearnerProfile()));
+      if(btn) { btn.textContent = "✅ Saved to Profile"; btn.disabled = true; }
+    }
+  } catch(e) { if(btn) btn.textContent = "⚠️ Failed to save"; }
+}
+
+async function refreshAIRecommendations() {
+  const profile = loadLearnerProfile();
+  if (!profile.isSignedIn || !profile.username) return;
+  const btn = document.getElementById("btn-refresh-ai");
+  if (btn) { btn.innerHTML = `⏳ Generating...`; btn.disabled = true; }
+  try {
+    const res = await fetchWithTimeout(apiUrl(`/learners/${profile.username}/refresh-ai`), { method: "POST" });
+    if (res.ok) {
+        saveLearnerProfile(profileFromApi(await res.json(), profile));
+        renderLearnerProfile();
+    } else throw new Error("Failed to refresh");
   } catch (err) {
-    console.error("Action error:", err);
-    const loadingEl = document.getElementById(loadingId);
-    if (loadingEl) loadingEl.remove();
-    const errorMessage =
-      err.name === "AbortError"
-        ? "Action timed out after 45 seconds. The order was not evaluated; try again after checking backend logs."
-        : `Action could not be processed: ${err.message}`;
-    appendLogEntry("sistem", errorMessage);
-    startGameLoop();
+      alert("Could not refresh AI recommendations: " + err.message);
   } finally {
-    // 5. Kritik: İstek bittiği an bayrağı ve buton kilitlerini temizle ki 2., 3. ve sonraki basışlarda asla kilitlenme olmasın
-    isRequestInProgress = false;
-    setInteractionsDisabled(false);
+      if (btn) { btn.innerHTML = `🔄 Refresh`; btn.disabled = false; }
   }
 }
 
-document.getElementById("action-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const input = document.getElementById("action-input");
-  const message = input.value.trim();
-  if (!message || isRequestInProgress) return;
+function renderLearnerProfile() {
+  const profile = loadLearnerProfile();
+  const cases = profile.completedCases || [];
+  const completed = profile.remoteSummary?.completedCases || cases.length;
+  const total = profile.remoteSummary?.totalCases || 20;
 
-  input.value = "";
-  stopGameLoop();
-  logTimelineEvent("Custom Order", message);
-  sendActionToServer(message);
-});
+  refreshLearnerIdentityUI();
+  document.getElementById("profile-case-count").textContent = `${completed}/${total}`;
+  document.getElementById("profile-avg-score").textContent = profile.remoteSummary?.averageScore ? `${profile.remoteSummary.averageScore}/100` : "--";
+  document.getElementById("profile-focus-area").textContent = profile.remoteSummary?.focusArea || "Protocol";
 
+  const recContainer = document.getElementById("profile-recommendations");
+  if (recContainer) {
+    recContainer.innerHTML = "";
+    const recs = profile.remoteSummary?.recommendations || [];
+    if (cases.length === 0 || !recs || recs.length === 0 || recs[0].title === "undefined") {
+      recContainer.innerHTML = `
+        <div style="background: rgba(30, 41, 59, 0.4); padding: 16px; border-radius: 10px; text-align: center; border: 1px dashed rgba(255,255,255,0.1);">
+          <span style="font-size: 2rem; display: block; margin-bottom: 8px;">📚</span>
+          <p class="profile-empty" style="color: #cbd5e1; font-size: 0.85rem;">
+            Complete at least one simulation to get AI-powered recommendations.
+          </p>
+        </div>`;
+    } else {
+      recs.forEach((rec) => {
+        const card = document.createElement("div");
+        card.className = "profile-rec-card";
+        card.innerHTML = `
+          <div class="rec-header"><span class="rec-tag">${rec.category}</span><span class="rec-diff">${rec.difficulty}</span></div>
+          <h5>${rec.title}</h5><p>${rec.reason}</p>
+          <button class="btn-rec-play" onclick="startSession('${rec.scenario_id}'); closeLearnerProfile();">Load Simulation</button>`;
+        recContainer.appendChild(card);
+      });
+    }
+  }
+
+  const topicContainer = document.getElementById("profile-study-topics");
+  if (topicContainer) {
+      topicContainer.innerHTML = "";
+      const topics = profile.remoteSummary?.studyTopics || [];
+      if (topics.length > 0) {
+          topics.forEach(t => {
+              const el = document.createElement("div");
+              el.className = "study-topic-item";
+              el.textContent = t;
+              topicContainer.appendChild(el);
+          });
+      } else {
+          topicContainer.innerHTML = `<p class="profile-empty" style="font-size:0.8rem;">No study topics yet.</p>`;
+      }
+  }
+
+  const historyContainer = document.getElementById("profile-history");
+  if (historyContainer) {
+    historyContainer.innerHTML = "";
+    if (!cases.length) historyContainer.innerHTML = `<p class="profile-empty">No completed simulations yet.</p>`;
+    else {
+      cases.slice(0, 4).forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "profile-history-item";
+        row.innerHTML = `<div><strong>${item.scenarioTitle || formatScenarioName(item.scenario)}</strong><span>${item.badge}</span></div><strong>${item.score}/100</strong>`;
+        historyContainer.appendChild(row);
+      });
+    }
+  }
+}
+
+function updateLearnerProfileLocally(report) {
+  if (!report) return;
+  const profile = loadLearnerProfile();
+  const caseRecord = {
+    sessionId: currentSessionId, scenario: activeScenarioKey, score: Number(report.score || 0),
+    badge: String(report.status_badge || "COMPLETED"), criteria: report.criteria || {},
+    strengths: String(report.strengths || ""), errors: String(report.errors || ""), suggestions: String(report.suggestions || ""),
+    completedAt: new Date().toISOString(),
+  };
+  const prev = (profile.completedCases || []).filter(i => i.sessionId !== currentSessionId);
+  profile.completedCases = [caseRecord, ...prev].slice(0, MAX_PROFILE_HISTORY);
+  saveLearnerProfile(profile);
+}
+
+async function refreshLearnerProfileFromServer() {
+  const profile = loadLearnerProfile();
+  if (!profile.isSignedIn || !profile.learnerId) return;
+  try {
+    const res = await fetchWithTimeout(apiUrl(`/learners/${profile.learnerId}/profile`), { method: "GET" });
+    if (res.ok) saveLearnerProfile(profileFromApi(await res.json(), profile));
+  } catch (err) {}
+}
+
+function openLearnerProfile() {
+  if (!loadLearnerProfile().isSignedIn) { openLearnerLogin(); return; }
+  refreshLearnerProfileFromServer().then(renderLearnerProfile); 
+  document.getElementById("learner-profile-modal")?.classList.add("active");
+}
+
+function closeLearnerProfile() { document.getElementById("learner-profile-modal")?.classList.remove("active"); }
+function initializeLearnerSession() { refreshLearnerIdentityUI(); renderLearnerProfile(); }
+
+// =========================================================================
+// 5. SIMULASYON YÖNETİMİ & API İSTEKLERİ
+// =========================================================================
 function logTimelineEvent(tag, desc) {
   const elapsedSec = sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0;
   sessionActionLogs.push({ time: `${elapsedSec}s`, tag, desc });
 }
 
+function stopGameLoop() { if (gameLoopInterval !== null) { clearInterval(gameLoopInterval); gameLoopInterval = null; } }
+function startGameLoop() {
+  stopGameLoop(); timeLeft = TURN_DURATION;
+  const timerDisplay = document.getElementById("timer-display");
+  if (timerDisplay) timerDisplay.textContent = timeLeft;
+  gameLoopInterval = setInterval(() => {
+    if (isRequestInProgress) return;
+    timeLeft--;
+    if (timerDisplay) timerDisplay.textContent = timeLeft < 10 ? `0${timeLeft}` : timeLeft;
+    currentHeartRate += heartRateDrift;
+    const roundedHR = Math.round(currentHeartRate);
+    document.getElementById("vital-nabiz").textContent = roundedHR;
+
+    if ((roundedHR <= minHeartRate || roundedHR >= maxHeartRate) && !hasBreachedThreshold) {
+      hasBreachedThreshold = true; stopGameLoop();
+      logTimelineEvent("Threshold Breach", `Heart rate critical (${roundedHR} bpm)`);
+      sendActionToServer(`[CRITICAL THRESHOLD BREACHED: Heart Rate reached ${roundedHR} bpm!]`);
+    } else if (timeLeft <= 0) {
+      stopGameLoop();
+      logTimelineEvent("Timeout Error", "30s elapsed with zero interventions");
+      sendActionToServer("[TIMEOUT: No clinical action taken for 30 seconds.]");
+    }
+  }, 1000);
+}
+
+function setInteractionsDisabled(disabled) {
+  document.getElementById("submit-btn").disabled = disabled;
+  document.getElementById("action-input").disabled = disabled;
+  document.querySelectorAll(".chip-btn").forEach(b => b.disabled = disabled);
+  document.getElementById("quick-action-container")?.classList.toggle("is-disabled", disabled);
+}
+
+async function startSession(scenarioType) {
+  activeScenarioKey = scenarioType || "acute_coronary_syndrome";
+  hasBreachedThreshold = false; isRequestInProgress = false; isEndingSession = false; pendingSessionReady = false;
+  stopGameLoop(); initAudioContext();
+  try {
+    const learnerId = loadLearnerProfile().learnerId;
+    const query = new URLSearchParams({ scenario_type: scenarioType });
+    if (learnerId) query.set("learner_id", learnerId);
+    const res = await fetchWithTimeout(apiUrl(`/session/start?${query.toString()}`), { method: "POST" });
+    if (!res.ok) throw new Error("Backend connection failed.");
+    const data = await res.json();
+    currentSessionId = data.session_id; sessionActionLogs = []; sessionStartTime = Date.now();
+    document.getElementById("chat-log").innerHTML = "";
+
+    const turn = data.turn;
+    currentHeartRate = turn.heart_rate || 110; currentSpO2 = turn.spo2 || 92; currentBP = turn.blood_pressure || "150/95"; currentConsciousness = turn.consciousness || "Alert";
+    minHeartRate = turn.min_heart_rate ?? 35; maxHeartRate = turn.max_heart_rate ?? 185; heartRateDrift = turn.heart_rate_drift ?? 0.4;
+    
+    document.getElementById("patient-display-name").textContent = `${turn.age || 54} Y/O ${turn.gender || 'Male'}`;
+    document.getElementById("patient-age").textContent = turn.age; document.getElementById("patient-gender").textContent = String(turn.gender).toUpperCase();
+    document.getElementById("patient-tani").textContent = turn.primary_diagnosis; document.getElementById("vital-spo2").textContent = turn.spo2;
+
+    const note = turn.system_note || "Patient admitted.";
+    document.getElementById("difficulty-modal-info").textContent = note;
+    document.getElementById("difficulty-age-gender").textContent = `${turn.age} Y/O / ${turn.gender}`;
+    document.getElementById("difficulty-tani").textContent = turn.primary_diagnosis;
+    document.getElementById("difficulty-nabiz").textContent = turn.heart_rate;
+    document.getElementById("difficulty-tansiyon").textContent = turn.blood_pressure;
+
+    renderLabModal(); logTimelineEvent("EMS Admission", `Patient admitted with ${turn.primary_diagnosis}`);
+    renderTurn(turn, null, false); pendingSessionReady = true; document.getElementById("difficulty-modal").classList.add("active");
+  } catch (err) { alert("Initialization Error: " + err.message); }
+}
+
+function openDifficultyModal(scenarioType) { startSession(scenarioType); }
+function closeDifficultyModal() { stopGameLoop(); document.getElementById("difficulty-modal")?.classList.remove("active"); }
+function confirmDifficultySelection(difficulty) {
+  if (!pendingSessionReady || !currentSessionId) return;
+  selectedDifficulty = difficulty;
+  document.getElementById("difficulty-modal")?.classList.remove("active");
+  renderQuickActions(); initAudioContext(); showScreen("sim"); startGameLoop();
+}
+
+function closePatientModal() { document.getElementById("patient-modal").classList.remove("active"); initAudioContext(); showScreen("sim"); startGameLoop(); }
+function openLabModal() { document.getElementById("lab-modal").classList.add("active"); }
+function closeLabModal() { document.getElementById("lab-modal").classList.remove("active"); }
+
 function abortSession() {
   if (isEndingSession) return;
-
   const modal = document.getElementById("abort-confirm-modal");
   const stage = document.getElementById("confirm-stage");
   const hr = document.getElementById("confirm-hr");
   const spo2 = document.getElementById("confirm-spo2");
-
   if (stage) stage.textContent = document.getElementById("turn-count")?.textContent || "--";
   if (hr) hr.textContent = `${Math.round(currentHeartRate)} bpm`;
   if (spo2) spo2.textContent = `${currentSpO2}%`;
-
   modal?.classList.add("active");
 }
+function closeAbortConfirmModal() { document.getElementById("abort-confirm-modal")?.classList.remove("active"); }
+function confirmAbortSession() { closeAbortConfirmModal(); stopGameLoop(); finishSession(); }
 
-function closeAbortConfirmModal() {
-  document.getElementById("abort-confirm-modal")?.classList.remove("active");
-}
+function executeQuickAction(cmd) { if (!isRequestInProgress && currentSessionId && !isEndingSession) { stopGameLoop(); logTimelineEvent("Doctor Order", cmd); sendActionToServer(cmd); } }
+document.getElementById("action-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = document.getElementById("action-input");
+  const msg = input.value.trim();
+  if (msg && !isRequestInProgress) { input.value = ""; stopGameLoop(); logTimelineEvent("Custom Order", msg); sendActionToServer(msg); }
+});
 
-function confirmAbortSession() {
-  closeAbortConfirmModal();
-  stopGameLoop();
-  finishSession();
-}
+async function sendActionToServer(message) {
+  if (!currentSessionId || isEndingSession || isRequestInProgress) return;
+  isRequestInProgress = true; stopGameLoop(); setInteractionsDisabled(true);
 
-function openLabModal() {
-  document.getElementById("lab-modal").classList.add("active");
-}
+  if (!message.startsWith("[")) appendLogEntry("user", message);
+  const loadingId = "loading-" + Date.now();
+  const log = document.getElementById("chat-log");
+  const loadingEntry = document.createElement("div");
+  loadingEntry.id = loadingId; loadingEntry.className = "log-entry sistem clinical-loading";
+  loadingEntry.innerHTML = `<span class="loading-pulse"></span><span class="loading-copy">⏳ Executing order...</span><span class="loading-dots"><i></i><i></i><i></i></span>`;
+  log.appendChild(loadingEntry); log.scrollTop = log.scrollHeight;
 
-function closeLabModal() {
-  document.getElementById("lab-modal").classList.remove("active");
-}
-
-// --- 8. Web Audio Outcome Sentezleyici ---
-function playOutcomeAudio(isSuccess) {
-  if (!isAudioEnabled || !audioCtx) return;
   try {
-    const now = audioCtx.currentTime;
-    if (isSuccess) {
-      [523.25, 659.25, 783.99].forEach((freq, idx) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
-        gain.gain.setValueAtTime(0.001, now + idx * 0.12);
-        gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.12 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.12 + 0.5);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(now + idx * 0.12);
-        osc.stop(now + idx * 0.12 + 0.55);
-      });
-    } else {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(820, now);
-
-      gain.gain.setValueAtTime(0.001, now);
-      gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
-      gain.gain.setValueAtTime(0.25, now + 2.5);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(now);
-      osc.stop(now + 3.0);
-    }
-  } catch (e) {
-    console.error("Outcome audio error:", e);
-  }
+    const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/act`), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, current_hr: Math.round(currentHeartRate), current_spo2: currentSpO2, current_bp: currentBP }),
+    });
+    if (!res.ok) throw new Error("Backend connection failed");
+    document.getElementById(loadingId)?.remove();
+    renderTurn(await res.json(), null, true);
+  } catch (err) {
+    document.getElementById(loadingId)?.remove();
+    appendLogEntry("sistem", `Action failed: ${err.message}`); startGameLoop();
+  } finally { isRequestInProgress = false; setInteractionsDisabled(false); }
 }
 
-// --- 9. Scorecard & Transition Modal ---
+function buildOutcomeCopy(report) {
+  const badge = String(report?.status_badge || "");
+  const errors = String(report?.errors || "");
+  const score = Number(report?.score || 0);
+  const hasFailure = /fail|arrest|critical/i.test(badge);
+  const hasDefinitiveCareGap = /cath|pci|reperfusion|p2y12|heparin|anticoag/i.test(errors);
+
+  if (hasFailure || score < 50) {
+    return { successAudio: false, color: "#ef4444", badge: "🚨 CRITICAL FAILURE / CARDIAC ARREST", icon: "⚡📉", title: "Patient Decompensated", desc: errors || "Critical stabilization steps were missed or delayed, resulting in severe deterioration." };
+  }
+  if (score < 80 || hasDefinitiveCareGap) {
+    return { successAudio: true, color: "#f59e0b", badge: "⚠️ PARTIAL STABILIZATION - DEFINITIVE CARE NEEDED", icon: "🫀📋", title: "Initial Stabilization Achieved", desc: "Initial bedside interventions improved the immediate risk, but the case still requires definitive protocol completion. Review the full evaluation for missed reperfusion or medication steps." };
+  }
+  return { successAudio: true, color: "#10b981", badge: "✅ CLINICAL STABILIZATION ACHIEVED", icon: "🫀✨", title: "Patient Successfully Stabilized", desc: "Timely and protocol-adherent interventions addressed immediate instability and definitive care was appropriately activated." };
+}
+
 async function finishSession() {
   if (isEndingSession || !currentSessionId) return;
-  isEndingSession = true;
-
-  stopGameLoop();
-  stopECGAnimation();
+  isEndingSession = true; stopGameLoop(); stopECGAnimation();
 
   const modalBadge = document.getElementById("outcome-badge");
   const modalIcon = document.getElementById("outcome-icon");
@@ -1531,309 +1087,108 @@ async function finishSession() {
   const modalLoading = document.getElementById("outcome-loading");
   const proceedBtn = document.getElementById("outcome-proceed-btn");
 
-  if (modalBadge) {
-    modalBadge.style.color = "#38bdf8";
-    modalBadge.textContent = "📊 JURY EVALUATION IN PROGRESS";
-  }
+  if (modalBadge) { modalBadge.style.color = "#38bdf8"; modalBadge.textContent = "📊 JURY EVALUATION IN PROGRESS"; }
   if (modalIcon) modalIcon.textContent = "⏳";
   if (modalTitle) modalTitle.textContent = "Generating Case Report";
-  if (modalDesc) {
-    modalDesc.textContent =
-      "The simulator is reviewing the recorded interventions, timing, vital trends, and protocol adherence.";
-  }
+  if (modalDesc) modalDesc.textContent = "The simulator is reviewing the recorded interventions, timing, vital trends, and protocol adherence.";
   if (modalLoading) modalLoading.style.display = "flex";
   if (proceedBtn) proceedBtn.style.display = "none";
 
   document.getElementById("outcome-modal").classList.add("active");
 
   try {
-    const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/end`), {
-      method: "POST",
-    });
+    const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/end`), { method: "POST" });
     if (!res.ok) throw new Error("Could not fetch evaluation report.");
     cachedReportData = await res.json();
 
     const outcome = buildOutcomeCopy(cachedReportData);
-    modalBadge.style.color = outcome.color;
-    modalBadge.textContent = outcome.badge;
-    modalIcon.textContent = outcome.icon;
-    modalTitle.textContent = outcome.title;
-    modalDesc.textContent = outcome.desc;
+    if(modalBadge) { modalBadge.style.color = outcome.color; modalBadge.textContent = outcome.badge; }
+    if(modalIcon) modalIcon.textContent = outcome.icon;
+    if(modalTitle) modalTitle.textContent = outcome.title;
+    if(modalDesc) modalDesc.textContent = outcome.desc;
 
     if (modalLoading) modalLoading.style.display = "none";
     if (proceedBtn) proceedBtn.style.display = "block";
     playOutcomeAudio(outcome.successAudio);
   } catch (err) {
-    if (modalBadge) {
-      modalBadge.style.color = "#ef4444";
-      modalBadge.textContent = "⚠️ EVALUATION FAILED";
-    }
+    if (modalBadge) { modalBadge.style.color = "#ef4444"; modalBadge.textContent = "⚠️ EVALUATION FAILED"; }
     if (modalIcon) modalIcon.textContent = "⚠️";
     if (modalTitle) modalTitle.textContent = "Report Could Not Be Generated";
     if (modalDesc) modalDesc.textContent = err.message;
     if (modalLoading) modalLoading.style.display = "none";
     if (proceedBtn) proceedBtn.style.display = "none";
-  } finally {
-    isEndingSession = false;
-  }
+  } finally { isEndingSession = false; }
 }
 
 function proceedToScorecard() {
   document.getElementById("outcome-modal").classList.remove("active");
   if (!cachedReportData) return;
+  const r = cachedReportData;
+  const to = sessionActionLogs.filter(l => l.tag === "Timeout Error" || l.tag === "Threshold Breach").length;
+  document.getElementById("report-score").textContent = r.score;
+  document.getElementById("report-badge").textContent = r.status_badge || "COMPLETED";
+  document.getElementById("rep-correct").textContent = r.correct_actions || 0;
+  document.getElementById("rep-wrong").textContent = Math.max(r.incorrect_actions || 0, to);
+  document.getElementById("rep-reaction").textContent = `${Math.max(1, Math.min(10, Math.round(r.reaction_score/10 || 8)))}/10`;
+  document.getElementById("report-strengths").textContent = r.strengths;
+  document.getElementById("report-mistakes").textContent = r.errors;
+  document.getElementById("report-suggestion").textContent = r.suggestions;
 
-  const report = cachedReportData;
-  const actualTimeouts = sessionActionLogs.filter(
-    (l) => l.tag === "Timeout Error" || l.tag === "Threshold Breach"
-  ).length;
-  const finalWrong = Math.max(report.incorrect_actions || 0, actualTimeouts);
+  const claimBtn = document.getElementById("claim-session-btn");
+  if (claimBtn) {
+    const isGuest = !loadLearnerProfile().isSignedIn;
+    claimBtn.style.display = isGuest ? "inline-block" : "none";
+    if (isGuest) { claimBtn.textContent = "💾 Save Case to Profile"; claimBtn.disabled = false; }
+  }
 
-  let rawReaction = report.reaction_score !== undefined ? report.reaction_score : 8;
-  if (rawReaction > 10) rawReaction = Math.round(rawReaction / 10);
-  rawReaction = Math.max(1, Math.min(10, rawReaction));
-
-  document.getElementById("report-score").textContent = report.score;
-  document.getElementById("report-badge").textContent = report.status_badge || "COMPLETED";
-  document.getElementById("rep-correct").textContent = report.correct_actions || 0;
-  document.getElementById("rep-wrong").textContent = finalWrong;
-  document.getElementById("rep-reaction").textContent = `${rawReaction}/10`;
-
-  document.getElementById("report-strengths").textContent = report.strengths;
-  document.getElementById("report-mistakes").textContent = report.errors;
-  document.getElementById("report-suggestion").textContent = report.suggestions;
-
-  updateLearnerProfile(report);
-  renderTimelineReplay();
-  showScreen("report");
-  drawRadarChart(report.criteria);
-}
-
-// --- Visual Timeline Replay ---
-function renderTimelineReplay() {
-  const container = document.getElementById("timeline-events");
-  if (!container) return;
-  container.innerHTML = "";
-
-  sessionActionLogs.forEach((item) => {
-    const row = document.createElement("div");
-
-    let typeClass = "primary";
-    let icon = "🩺";
-
-    if (item.tag.includes("Timeout")) {
-      typeClass = "danger";
-      icon = "⌛";
-    } else if (item.tag.includes("Breach")) {
-      typeClass = "danger";
-      icon = "⚡";
-    } else if (item.tag.includes("EMS") || item.tag.includes("Admission")) {
-      typeClass = "primary";
-      icon = "🚑";
-    } else if (item.tag.includes("Order") || item.tag.includes("Doctor")) {
-      typeClass = "success";
-      icon = "💊";
-    }
-
-    row.className = `timeline-item ${typeClass}`;
-    row.innerHTML = `
-      <span class="timeline-badge">${icon} +${item.time}</span>
-      <div class="timeline-body">
-        <strong class="timeline-tag">${item.tag}:</strong>
-        <span class="timeline-action">${item.desc}</span>
-      </div>
-    `;
-    container.appendChild(row);
-  });
+  updateLearnerProfileLocally(r); renderTimelineReplay(); showScreen("report"); drawRadarChart(r.criteria);
 }
 
 function returnToMenu() {
-  currentSessionId = null;
-  hasBreachedThreshold = false;
-  isRequestInProgress = false;
-  isEndingSession = false;
-  selectedDifficulty = "easy";
-  pendingScenarioKey = null;
-  pendingSessionReady = false;
-  stopGameLoop();
-  stopECGAnimation();
-  showScreen("select");
-  loadScenarios();
+  currentSessionId = null; hasBreachedThreshold = false; isRequestInProgress = false; isEndingSession = false;
+  selectedDifficulty = "easy"; pendingScenarioKey = null; pendingSessionReady = false;
+  stopGameLoop(); stopECGAnimation(); showScreen("select"); loadScenarios();
 }
 
-// --- Clinical Competencies Radar Chart ---
-function drawRadarChart(criteria = {}) {
-  const canvas = document.getElementById("radar-canvas");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  const width = canvas.width;
-  const height = canvas.height;
-  const cx = width / 2;
-  const cy = height / 2;
-  const radius = 88;
-
-  ctx.clearRect(0, 0, width, height);
-
-  const axes = [
-    { label: "Protocol Adherence", val: criteria?.protocol_adherence ?? 18 },
-    { label: "Diagnostic Accuracy", val: criteria?.diagnostic_accuracy ?? 18 },
-    { label: "Patient Safety", val: criteria?.patient_safety ?? 18 },
-    { label: "Pharmacology", val: criteria?.pharmacology_precision ?? 18 },
-  ];
-
-  const totalAxes = axes.length;
-
-  for (let r = 0.25; r <= 1.0; r += 0.25) {
-    ctx.beginPath();
-    for (let i = 0; i < totalAxes; i++) {
-      const angle = (Math.PI * 2 / totalAxes) * i - Math.PI / 2;
-      const x = cx + Math.cos(angle) * (radius * r);
-      const y = cy + Math.sin(angle) * (radius * r);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.15)";
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "bold 9.5px 'Plus Jakarta Sans'";
-  ctx.textAlign = "center";
-
-  for (let i = 0; i < totalAxes; i++) {
-    const angle = (Math.PI * 2 / totalAxes) * i - Math.PI / 2;
-    const x = cx + Math.cos(angle) * radius;
-    const y = cy + Math.sin(angle) * radius;
-
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(x, y);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-    ctx.stroke();
-
-    const lx = cx + Math.cos(angle) * (radius + 20);
-    const ly = cy + Math.sin(angle) * (radius + 14);
-    ctx.fillText(`${axes[i].label} (${axes[i].val}/25)`, lx, ly);
-  }
-
-  ctx.beginPath();
-  for (let i = 0; i < totalAxes; i++) {
-    const scoreRatio = Math.min(25, Math.max(0, axes[i].val)) / 25;
-    const angle = (Math.PI * 2 / totalAxes) * i - Math.PI / 2;
-    const x = cx + Math.cos(angle) * (radius * scoreRatio);
-    const y = cy + Math.sin(angle) * (radius * scoreRatio);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle = "rgba(56, 189, 248, 0.35)";
-  ctx.fill();
-  ctx.strokeStyle = "#38bdf8";
-  ctx.lineWidth = 2.2;
-  ctx.shadowBlur = 8;
-  ctx.shadowColor = "#38bdf8";
-  ctx.stroke();
-}
-
-// --- 10. Synchronized Real-Time Telemetry ECG ---
-let ecgAnimationId = null;
-let lastFrameTime = null;
-let timeSinceLastBeat = 0;
-let hasBeepedThisBeat = false;
-
+// =========================================================================
+// 6. ECG ANIMATION
+// =========================================================================
+let ecgAnimationId = null, lastFrameTime = null, timeSinceLastBeat = 0, hasBeepedThisBeat = false;
 function initECGAnimation() {
   const canvas = document.getElementById("ecg-canvas");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
-  canvas.width = canvas.parentElement.clientWidth;
-  canvas.height = canvas.parentElement.clientHeight;
-
-  let x = 0;
-  let points = [];
-  const width = canvas.width;
-  const height = canvas.height;
-  const midY = height / 2;
-
-  lastFrameTime = performance.now();
-  timeSinceLastBeat = 0;
-  hasBeepedThisBeat = false;
+  canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight;
+  let x = 0, points = []; const width = canvas.width, height = canvas.height, midY = height / 2;
+  lastFrameTime = performance.now(); timeSinceLastBeat = 0; hasBeepedThisBeat = false;
 
   function draw(now) {
-    const dt = (now - lastFrameTime) / 1000;
-    lastFrameTime = now;
-
+    const dt = (now - lastFrameTime) / 1000; lastFrameTime = now;
     const isFlatline = currentHeartRate <= 30;
-    const validHR = Math.max(35, Math.min(220, currentHeartRate));
-    const beatInterval = 60 / validHR;
-
     timeSinceLastBeat += dt;
-
-    if (timeSinceLastBeat >= beatInterval) {
-      timeSinceLastBeat %= beatInterval;
-      hasBeepedThisBeat = false;
-    }
-
-    x += 2.2;
-    if (x > width) {
-      x = 0;
-      points = [];
-    }
-
+    if (timeSinceLastBeat >= 60 / Math.max(35, Math.min(220, currentHeartRate))) { timeSinceLastBeat %= (60 / Math.max(35, Math.min(220, currentHeartRate))); hasBeepedThisBeat = false; }
+    x += 2.2; if (x > width) { x = 0; points = []; }
     let y = midY;
-
-    if (isFlatline) {
-      y = midY + (Math.random() - 0.5) * 2;
-    } else {
+    if (isFlatline) y = midY + (Math.random() - 0.5) * 2;
+    else {
       const t = timeSinceLastBeat;
-      if (t >= 0.04 && t < 0.12) {
-        y = midY - 6 * Math.sin(((t - 0.04) / 0.08) * Math.PI);
-      } else if (t >= 0.13 && t < 0.16) {
-        y = midY + 4;
-      } else if (t >= 0.16 && t < 0.22) {
-        y = midY - 48 * Math.sin(((t - 0.16) / 0.06) * Math.PI);
-        if (!hasBeepedThisBeat && t >= 0.18) {
-          playBedsideBeep();
-          hasBeepedThisBeat = true;
-        }
-      } else if (t >= 0.22 && t < 0.26) {
-        y = midY + 16;
-      } else if (t >= 0.28 && t < 0.40) {
-        y = midY - 12 * Math.sin(((t - 0.28) / 0.12) * Math.PI);
-      } else {
-        y = midY + (Math.random() - 0.5) * 1.5;
-      }
+      if (t >= 0.04 && t < 0.12) y = midY - 6 * Math.sin(((t - 0.04) / 0.08) * Math.PI);
+      else if (t >= 0.13 && t < 0.16) y = midY + 4;
+      else if (t >= 0.16 && t < 0.22) { y = midY - 48 * Math.sin(((t - 0.16) / 0.06) * Math.PI); if (!hasBeepedThisBeat && t >= 0.18) { playBedsideBeep(); hasBeepedThisBeat = true; } }
+      else if (t >= 0.22 && t < 0.26) y = midY + 16;
+      else if (t >= 0.28 && t < 0.40) y = midY - 12 * Math.sin(((t - 0.28) / 0.12) * Math.PI);
+      else y = midY + (Math.random() - 0.5) * 1.5;
     }
-
     points.push({ x, y });
-
-    ctx.fillStyle = "rgba(3, 7, 18, 0.16)";
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = isFlatline ? "#ef4444" : "#38bdf8";
-    ctx.lineWidth = 2.2;
-    ctx.shadowBlur = 9;
-    ctx.shadowColor = isFlatline ? "#ef4444" : "#38bdf8";
-
+    ctx.fillStyle = "rgba(3, 7, 18, 0.16)"; ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = isFlatline ? "#ef4444" : "#38bdf8"; ctx.lineWidth = 2.2; ctx.shadowBlur = 9; ctx.shadowColor = isFlatline ? "#ef4444" : "#38bdf8";
     ctx.beginPath();
-    for (let i = 0; i < points.length; i++) {
-      if (i === 0) ctx.moveTo(points[i].x, points[i].y);
-      else ctx.lineTo(points[i].x, points[i].y);
-    }
-    ctx.stroke();
-
-    ecgAnimationId = requestAnimationFrame(draw);
+    for (let i = 0; i < points.length; i++) { if (i === 0) ctx.moveTo(points[i].x, points[i].y); else ctx.lineTo(points[i].x, points[i].y); }
+    ctx.stroke(); ecgAnimationId = requestAnimationFrame(draw);
   }
-
   if (ecgAnimationId) cancelAnimationFrame(ecgAnimationId);
   ecgAnimationId = requestAnimationFrame(draw);
 }
+function stopECGAnimation() { if (ecgAnimationId) { cancelAnimationFrame(ecgAnimationId); ecgAnimationId = null; } }
 
-function stopECGAnimation() {
-  if (ecgAnimationId) {
-    cancelAnimationFrame(ecgAnimationId);
-    ecgAnimationId = null;
-  }
-}
-
-initializeLearnerSession();
-loadScenarios();
+initializeLearnerSession(); loadScenarios();

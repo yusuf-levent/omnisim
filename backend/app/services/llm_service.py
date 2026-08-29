@@ -12,12 +12,10 @@ client = OpenAI(
 )
 MODEL = settings.LLM_MODEL
 
-
 class LLMServiceError(RuntimeError):
     pass
 
-
-def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 280) -> dict:
+def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 350) -> dict:
     enforce_system = (
         system_prompt
         + "\n\nREAL-TIME RESPONSE RULES:\n"
@@ -61,7 +59,6 @@ def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 28
         logger.exception("LLM returned invalid JSON")
         raise LLMServiceError("LLM returned invalid JSON") from exc
 
-
 def start_scenario(scenario_prompt: str) -> dict:
     conversation = [
         {
@@ -71,11 +68,9 @@ def start_scenario(scenario_prompt: str) -> dict:
     ]
     return _call_llm(scenario_prompt, conversation)
 
-
 def process_turn(scenario_prompt: str, history: list[dict], user_message: str) -> dict:
     conversation = history + [{"role": "user", "content": user_message}]
     return _call_llm(scenario_prompt, conversation)
-
 
 def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     report_instruction = """
@@ -83,15 +78,6 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     Do NOT use Turkish under any circumstances.
     Use the GROUND-TRUTH ACTION AUDIT TRAIL in the conversation as the authoritative source of physician actions.
     Never criticize the physician for omitting an intervention that appears in that audit trail.
-    If the case is STEMI/ACS, do not describe the performance as definitive stabilization unless reperfusion care was activated (Cath Lab/primary PCI or equivalent), and credit P2Y12 loading plus anticoagulation when present.
-
-    SCORING STANDARDS:
-    1. EXCELLENT STABILIZATION & PROTOCOL ADHERENCE (90-100 / OUTSTANDING):
-       - Full first-line and supportive resuscitation bundle executed appropriately. All 4 competencies scored 22-25 / 25.
-    2. INCOMPLETE / PARTIAL (50-79 / COMPETENT or NEEDS IMPROVEMENT):
-       - Incomplete supportive measures or minor protocol delays.
-    3. ARREST / FATAL NEGLECT (0-35 / CRITICAL FAILURE):
-       - Zero intervention, uncorrected lethal hypoxia, or fatal drug contraindications.
 
     OUTPUT FORMAT (JSON ONLY - ALL TEXT IN ENGLISH):
     {
@@ -113,3 +99,38 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     """
     conversation = history + [{"role": "user", "content": report_instruction}]
     return _call_llm(scenario_prompt, conversation, max_tokens=800)
+
+# GÜNCELLENDİ: Hem Senaryo Hem Çalışma Konusu Üretiyor
+def generate_profile_recommendations(history: list[dict], available_scenarios: list[dict]) -> dict:
+    instruction = f"""
+    You are an expert medical educator and AI Mentor. 
+    Analyze this resident's recent clinical simulation performance history (scores and specific clinical errors).
+    Based strictly on their weaknesses, select EXACTLY 2 cases from the AVAILABLE SCENARIOS list that will best advance their training.
+    Additionally, provide exactly 3 medical STUDY TOPICS (guidelines, pathophysiology, or pharmacology topics) they should review.
+    
+    AVAILABLE SCENARIOS:
+    {json.dumps(available_scenarios)}
+    
+    LEARNER HISTORY:
+    {json.dumps(history)}
+    
+    OUTPUT FORMAT (Strict JSON):
+    {{
+      "recommendations": [
+        {{
+          "scenario_id": "exact_id_from_available_scenarios",
+          "title": "Scenario Label",
+          "category": "Focus Area",
+          "reason": "Pedagogical reason addressing a specific weakness.",
+          "difficulty": "Intermediate"
+        }}
+      ],
+      "study_topics": [
+        "AHA ACLS Guidelines for Bradycardia",
+        "Pharmacokinetics of Vasopressors",
+        "Recognition of Tension Pneumothorax"
+      ]
+    }}
+    """
+    conversation = [{"role": "user", "content": "Analyze my history and provide recommendations and study topics strictly in JSON."}]
+    return _call_llm(instruction, conversation, max_tokens=1000)

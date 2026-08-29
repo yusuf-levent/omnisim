@@ -1,13 +1,11 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 
-
 class ActionRequest(BaseModel):
     message: str
     current_hr: Optional[int] = None
     current_spo2: Optional[int] = None
     current_bp: Optional[str] = None
-
 
 class TurnResponse(BaseModel):
     session_id: str
@@ -26,7 +24,6 @@ class TurnResponse(BaseModel):
     max_heart_rate: int = 140
     case_completed: bool
 
-
 class ReportResponse(BaseModel):
     session_id: str
     score: int
@@ -39,22 +36,28 @@ class ReportResponse(BaseModel):
     errors: str
     suggestions: str
 
-
 class SessionStartResponse(BaseModel):
     session_id: str
     scenario_type: str
     turn: TurnResponse
 
-
 class LearnerLoginRequest(BaseModel):
-    learner_id: Optional[str] = None
-    display_name: str
+    username: str
+    email: str
+    password: str
     training_track: str = "Emergency Medicine"
 
+class ScenarioRecommendation(BaseModel):
+    scenario_id: str
+    title: str
+    category: str
+    reason: str
+    difficulty: str = "Intermediate"
 
 class LearnerCaseSummary(BaseModel):
     session_id: str
     scenario: str
+    scenario_title: str
     score: int
     badge: str
     criteria: Dict[str, int]
@@ -62,13 +65,15 @@ class LearnerCaseSummary(BaseModel):
     suggestions: str
     completed_at: str
 
-
 class LearnerProfileResponse(BaseModel):
     learner_id: str
+    username: str
     display_name: str
     training_track: str
     completed_cases: int
+    total_available_cases: int = 20
     average_score: Optional[int]
     focus_area: str
-    recommendations: List[str]
+    recommendations: List[ScenarioRecommendation]
+    study_topics: List[str]  # YENİ: Tıbbi Çalışma Konuları
     recent_cases: List[LearnerCaseSummary]

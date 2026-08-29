@@ -4,30 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OmniSim AI - Interactive Clinical Decision Simulator</title>
-  <link rel="stylesheet" href="assets/css/style.css?v=20260829-02" />
+  <link rel="stylesheet" href="assets/css/style.css?v=20260829-09" />
 </head>
 <body>
   <div id="app">
 
-    <!-- Top Navigation Bar -->
     <header class="top-nav">
       <div class="nav-brand">
         <div class="brand-icon">🫀</div>
         <div class="brand-title">OmniSim <span>AI</span></div>
       </div>
       <div class="nav-user">
-        <button id="btn-profile" class="btn-profile" onclick="openLearnerProfile()">
-          🧠 PROFILE
-        </button>
-        <button id="btn-audio-toggle" class="btn-audio" onclick="toggleAudio()">
-          🔊 SOUND: <span id="audio-status">ON</span>
-        </button>
-        <button id="btn-abort-session" class="btn-abort" onclick="abortSession()" style="display:none;">
-          🛑 CONCLUDE & EVALUATE
-        </button>
-        <div class="status-indicator">
-          <span class="live-dot"></span> SIMULATION ACTIVE
-        </div>
+        <button id="btn-profile" class="btn-profile" onclick="openLearnerProfile()">🧠 PROFILE</button>
+        <button id="btn-audio-toggle" class="btn-audio" onclick="toggleAudio()">🔊 SOUND: <span id="audio-status">ON</span></button>
+        <button id="btn-abort-session" class="btn-abort" onclick="abortSession()" style="display:none;">🛑 CONCLUDE & EVALUATE</button>
+        <div class="status-indicator"><span class="live-dot"></span> SIMULATION ACTIVE</div>
         <div class="user-profile">
           <div class="user-avatar">👨‍⚕️</div>
           <div class="user-info">
@@ -38,28 +29,23 @@
       </div>
     </header>
 
-    <!-- 1. Scenario Selection Lobby -->
     <section id="screen-select" class="screen active">
       <div class="hero-header">
         <div class="badge">OmniSim AI Clinical Simulation Lab</div>
         <h1>Emergency Clinical Simulator</h1>
         <p class="subtitle">AI-Powered High-Fidelity Training Platform — Select an active case to begin</p>
       </div>
-
       <div id="scenario-list" class="scenario-grid"></div>
     </section>
 
-    <!-- 2. Interactive Simulation Workspace -->
     <section id="screen-sim" class="screen">
       <div class="dashboard-grid">
 
-        <!-- Left Column: Patient Profile & Dynamic DDx Board -->
         <div class="dash-panel patient-panel">
           <div class="panel-title-bar">
             <span>👤 PATIENT PROFILE</span>
             <span class="tag-status">TRIAGE: RESUSCITATION</span>
           </div>
-
           <div class="patient-id-badge">
             <div class="patient-avatar-box">🏥</div>
             <div class="patient-id-meta">
@@ -67,155 +53,78 @@
               <p>Admission: EMS / Code 3</p>
             </div>
           </div>
-
           <div class="patient-meta-grid">
-            <div class="meta-item">
-              <span class="meta-label">AGE</span>
-              <span id="patient-age" class="meta-val">--</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">GENDER</span>
-              <span id="patient-gender" class="meta-val">--</span>
-            </div>
-            <div class="meta-item full">
-              <span class="meta-label">WORKING DIAGNOSIS</span>
-              <span id="patient-tani" class="meta-val">--</span>
-            </div>
+            <div class="meta-item"><span class="meta-label">AGE</span><span id="patient-age" class="meta-val">--</span></div>
+            <div class="meta-item"><span class="meta-label">GENDER</span><span id="patient-gender" class="meta-val">--</span></div>
+            <div class="meta-item full"><span class="meta-label">WORKING DIAGNOSIS</span><span id="patient-tani" class="meta-val">--</span></div>
           </div>
-
-          <!-- Feature: Dynamic Differential Diagnosis (DDx) Board -->
           <div class="ddx-card">
             <div class="ddx-header">🎯 DIFFERENTIAL DIAGNOSIS (DDx)</div>
             <div id="ddx-list-container" class="ddx-list"></div>
           </div>
-
           <div class="doctor-notes-card">
             <div class="notes-header">📋 TRIAGE & CLINICAL OBSERVATIONS</div>
             <p id="doctor-note-text">Patient admitted to resuscitation bay. Telemetry online.</p>
           </div>
         </div>
 
-        <!-- Top Right: Live Telemetry & Vitals Monitor -->
         <div class="dash-panel monitor-panel">
           <div class="panel-title-bar">
-            <div class="monitor-title">
-              <span>📈 LIVE BEDSIDE MONITOR</span>
-            </div>
+            <div class="monitor-title"><span>📈 LIVE BEDSIDE MONITOR</span></div>
             <div class="monitor-actions">
               <button class="btn-diag" onclick="openLabModal()">🧪 VIEW LABS / ECG STRIP</button>
               <span class="monitor-subtext">Continuous Telemetry Online</span>
             </div>
           </div>
-
           <div class="monitor-content">
-            <div class="ecg-screen">
-              <canvas id="ecg-canvas"></canvas>
-            </div>
-
+            <div class="ecg-screen"><canvas id="ecg-canvas"></canvas></div>
             <div class="vitals-column">
-              <div class="vital-box">
-                <div class="vital-info">
-                  <span class="vital-name">HEART RATE</span>
-                  <span class="vital-num" id="vital-nabiz">--</span>
-                  <span class="vital-unit">bpm</span>
-                </div>
-              </div>
-
-              <div class="vital-box">
-                <div class="vital-info">
-                  <span class="vital-name">BLOOD PRESSURE</span>
-                  <span class="vital-num" id="vital-tansiyon">--</span>
-                  <span class="vital-unit">mmHg</span>
-                </div>
-              </div>
-
-              <div class="vital-box">
-                <div class="vital-info">
-                  <span class="vital-name">SpO2</span>
-                  <span class="vital-num" id="vital-spo2">--</span>
-                  <span class="vital-unit">%</span>
-                </div>
-              </div>
-
-              <div class="vital-box">
-                <div class="vital-info">
-                  <span class="vital-name">CONSCIOUSNESS</span>
-                  <span class="vital-num-text" id="vital-bilinc">--</span>
-                </div>
-              </div>
+              <div class="vital-box"><div class="vital-info"><span class="vital-name">HEART RATE</span><span class="vital-num" id="vital-nabiz">--</span><span class="vital-unit">bpm</span></div></div>
+              <div class="vital-box"><div class="vital-info"><span class="vital-name">BLOOD PRESSURE</span><span class="vital-num" id="vital-tansiyon">--</span><span class="vital-unit">mmHg</span></div></div>
+              <div class="vital-box"><div class="vital-info"><span class="vital-name">SpO2</span><span class="vital-num" id="vital-spo2">--</span><span class="vital-unit">%</span></div></div>
+              <div class="vital-box"><div class="vital-info"><span class="vital-name">CONSCIOUSNESS</span><span class="vital-num-text" id="vital-bilinc">--</span></div></div>
             </div>
           </div>
         </div>
 
-        <!-- Bottom Center: Clinical Log & Quick Action Chips -->
         <div class="dash-panel chat-panel">
           <div class="panel-title-bar">
             <span>💬 CLINICAL INTERACTION LOG</span>
             <span class="turn-indicator">STAGE: <strong id="turn-count">1</strong></span>
           </div>
-
           <div id="chat-log" class="chat-log"></div>
-
-          <!-- Dynamic Quick Action Container -->
           <div id="quick-action-container" class="quick-action-bar"></div>
-
           <form id="action-form" class="action-form">
-            <input
-              id="action-input"
-              type="text"
-              placeholder="Enter custom clinical order... (e.g. Sublingual Nitroglycerin 0.4mg, draw repeat Troponin)"
-              autocomplete="off"
-            />
+            <input id="action-input" type="text" placeholder="Enter custom clinical order... (e.g. Sublingual NTG 0.4mg)" autocomplete="off" />
             <button id="submit-btn" type="submit">EXECUTE</button>
           </form>
         </div>
 
-        <!-- Bottom Right: Code Red Engine -->
         <div class="dash-panel timer-panel">
-          <div class="panel-title-bar">
-            <span>🚨 TRIAGE STATUS</span>
-          </div>
-
+          <div class="panel-title-bar"><span>🚨 TRIAGE STATUS</span></div>
           <div class="code-red-box">
             <span class="code-red-title">CODE RED</span>
             <div class="countdown-circle">
-              <span id="timer-display">30</span>
-              <span class="sec-label">SECONDS</span>
+              <span id="timer-display">30</span><span class="sec-label">SECONDS</span>
             </div>
             <p class="timer-desc">Time-sensitive deterioration active. Delayed intervention accelerates patient collapse.</p>
           </div>
         </div>
-
       </div>
     </section>
 
-    <!-- 3. Performance Scorecard & Evaluation with Timeline -->
     <section id="screen-report" class="screen">
       <div class="report-container">
-        
         <div class="report-header">
           <h2>CASE PERFORMANCE EVALUATION</h2>
           <p>Educational Simulation Performance & Jury Rubric Analysis</p>
         </div>
-
         <div class="report-grid-top">
-          <div class="radar-card">
-            <canvas id="radar-canvas" width="340" height="300"></canvas>
-          </div>
-
+          <div class="radar-card"><canvas id="radar-canvas" width="340" height="300"></canvas></div>
           <div class="metrics-card">
-            <div class="metric-row green">
-              <span class="metric-label">Correct Clinical Interventions</span>
-              <span class="metric-val" id="rep-correct">0</span>
-            </div>
-            <div class="metric-row red">
-              <span class="metric-label">Clinical Errors / Timeouts</span>
-              <span class="metric-val" id="rep-wrong">0</span>
-            </div>
-            <div class="metric-row yellow">
-              <span class="metric-label">Reaction Speed Index</span>
-              <span class="metric-val" id="rep-reaction">0/10</span>
-            </div>
+            <div class="metric-row green"><span class="metric-label">Correct Interventions</span><span class="metric-val" id="rep-correct">0</span></div>
+            <div class="metric-row red"><span class="metric-label">Errors / Timeouts</span><span class="metric-val" id="rep-wrong">0</span></div>
+            <div class="metric-row yellow"><span class="metric-label">Reaction Speed Index</span><span class="metric-val" id="rep-reaction">0/10</span></div>
             <div class="total-score-box">
               <span class="score-title">Overall Performance Score:</span>
               <div class="score-big"><span id="report-score">0</span>/100</div>
@@ -223,96 +132,91 @@
             </div>
           </div>
         </div>
-
-        <!-- Feature: Interactive Event Timeline -->
         <div class="timeline-container">
           <h4>⏱️ CLINICAL DECISION TIMELINE REPLAY</h4>
           <div id="timeline-events" class="timeline-events"></div>
         </div>
-
         <div class="report-grid-bottom">
-          <div class="feedback-card green-card">
-            <h4>✅ STRENGTHS & PROTOCOL ADHERENCE</h4>
-            <p id="report-strengths">--</p>
-          </div>
-          <div class="feedback-card red-card">
-            <h4>⚠️ ERROR ANALYSIS & GAPS</h4>
-            <p id="report-mistakes">--</p>
-          </div>
-          <div class="feedback-card blue-card">
-            <h4>💡 PEDAGOGICAL RECOMMENDATIONS</h4>
-            <p id="report-suggestion">--</p>
-          </div>
+          <div class="feedback-card green-card"><h4>✅ STRENGTHS</h4><p id="report-strengths">--</p></div>
+          <div class="feedback-card red-card"><h4>⚠️ ERRORS & GAPS</h4><p id="report-mistakes">--</p></div>
+          <div class="feedback-card blue-card"><h4>💡 RECOMMENDATIONS</h4><p id="report-suggestion">--</p></div>
         </div>
-
-        <div class="report-actions">
+        <div class="report-actions" style="display: flex; gap: 12px; justify-content: center;">
           <button id="restart-btn" class="btn-primary" onclick="returnToMenu()">Return to Lobby / Select New Case</button>
+          <button id="claim-session-btn" class="btn-primary" style="background: #10b981; display: none;" onclick="promptClaimSession()">💾 Save Case to Profile</button>
         </div>
-
       </div>
     </section>
 
-    <!-- 4. Local Learner Sign-in Modal -->
+    <!-- Login Modal -->
     <div id="learner-login-modal" class="modal-overlay">
       <div class="modal-card login-card">
+        <button class="modal-close-x" type="button" onclick="closeLearnerLogin()">×</button>
         <div class="modal-badge">🧠 OMNISIM LEARNER SESSION</div>
-        <h2>Start Personalized Training</h2>
-        <p class="modal-text">
-          Create a local learner session so OmniSim can attach simulation reports to your profile and update recommendations after each case.
-        </p>
+        <h2>Create Account / Sign In</h2>
+        <p class="modal-text">Sign in to save your progress or enter details to create a new profile.</p>
         <form id="learner-login-form" class="login-form" onsubmit="handleLearnerLogin(event)">
-          <label for="learner-name-input">Display Name</label>
-          <input id="learner-name-input" type="text" value="Dr. On-Duty Resident" maxlength="48" autocomplete="name" required />
-
+          <label for="learner-email-input">Email Address</label>
+          <input id="learner-email-input" type="email" placeholder="doctor@hospital.com" required />
+          <label for="learner-username-input">Username (Unique ID)</label>
+          <input id="learner-username-input" type="text" placeholder="e.g. dr_smith" autocomplete="username" required />
+          <label for="learner-password-input">Password</label>
+          <input id="learner-password-input" type="password" placeholder="••••••••" required />
+          <p style="font-size: 0.65rem; color: #94a3b8; margin-top: -6px;">Must contain at least 1 uppercase, 1 lowercase, and 1 number.</p>
+          <label for="learner-password-confirm">Confirm Password</label>
+          <input id="learner-password-confirm" type="password" placeholder="••••••••" required />
           <label for="learner-track-select">Training Track</label>
           <select id="learner-track-select">
             <option value="Emergency Medicine">Emergency Medicine</option>
             <option value="Courtroom Practice">Courtroom Practice</option>
             <option value="Crisis Management">Crisis Management</option>
-            <option value="Interview Training">Interview Training</option>
           </select>
-
-          <button class="btn-modal" type="submit">START LEARNING PROFILE</button>
+          <button class="btn-modal" type="submit">LOGIN / REGISTER</button>
         </form>
       </div>
     </div>
 
-    <!-- 5. Learner Profile Modal -->
+    <!-- Profile Modal -->
     <div id="learner-profile-modal" class="modal-overlay">
       <div class="modal-card profile-card">
-        <button class="modal-close-x" type="button" onclick="closeLearnerProfile()" aria-label="Close learner profile">×</button>
+        <button class="modal-close-x" type="button" onclick="closeLearnerProfile()">×</button>
         <div class="modal-badge">🧠 PERSONALIZED LEARNING PROFILE</div>
         <h2 id="profile-learner-name">Guest Learner</h2>
         <p id="profile-learner-track" class="profile-track">Not signed in</p>
+        
         <div class="profile-stats">
-          <div>
-            <span>Cases</span>
-            <strong id="profile-case-count">0</strong>
-          </div>
-          <div>
-            <span>Avg Score</span>
-            <strong id="profile-avg-score">--</strong>
-          </div>
-          <div>
-            <span>Focus</span>
-            <strong id="profile-focus-area">Protocol</strong>
-          </div>
+          <div><span>Completion</span><strong id="profile-case-count">0/20</strong></div>
+          <div><span>Avg Score</span><strong id="profile-avg-score">--</strong></div>
+          <div><span>Focus Area</span><strong id="profile-focus-area">Protocol</strong></div>
         </div>
-        <div class="profile-section">
-          <h4>Adaptive Recommendations</h4>
-          <div id="profile-recommendations" class="profile-recommendations"></div>
+
+        <div class="profile-split-layout">
+            <div class="profile-section" style="margin-top: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <h4 style="margin-bottom: 0;">AI Case Recommendations</h4>
+                  <button id="btn-refresh-ai" class="btn-refresh" onclick="refreshAIRecommendations()">🔄 Refresh</button>
+              </div>
+              <div id="profile-recommendations" class="profile-recommendations"></div>
+            </div>
+            
+            <div class="profile-section" style="margin-top: 0;">
+              <h4>Topics to Study</h4>
+              <div id="profile-study-topics" class="study-topics-list"></div>
+              <h4 style="margin-top: 24px;">Recent Memory</h4>
+              <div id="profile-history" class="profile-history"></div>
+            </div>
         </div>
-        <div class="profile-section">
-          <h4>Recent Simulation Memory</h4>
-          <div id="profile-history" class="profile-history"></div>
+        
+        <div style="margin-top: 24px; text-align: right; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px;">
+          <button class="btn-modal danger" style="width: auto; padding: 10px 24px; font-size: 0.8rem;" onclick="logoutLearner()">LOGOUT</button>
         </div>
       </div>
     </div>
 
-    <!-- 6. EMS Arrival Pop-up Modal -->
+    <!-- System Modals -->
     <div id="patient-modal" class="modal-overlay">
       <div class="modal-card">
-        <div class="modal-badge">🚨 EMS INCOMING TRAUMA/MEDICAL NOTIFICATION</div>
+        <div class="modal-badge">🚨 EMS INCOMING NOTIFICATION</div>
         <h2 id="modal-patient-title">Patient Intake Briefing</h2>
         <div class="modal-body">
           <p id="modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
@@ -323,25 +227,23 @@
             <div><strong>Baseline BP:</strong> <span id="modal-tansiyon">--</span></div>
           </div>
         </div>
-        <button id="modal-close-btn" class="btn-modal" onclick="closePatientModal()">TAKE OVER RESUSCITATION (START)</button>
+        <button id="modal-close-btn" class="btn-modal" onclick="closePatientModal()">TAKE OVER RESUSCITATION</button>
       </div>
     </div>
 
-    <!-- 7. Feature: Dynamic Diagnostics & Lab Results Modal -->
     <div id="lab-modal" class="modal-overlay">
       <div class="modal-card wide">
-        <div class="modal-badge">🔬 STAT EMERGENCY DIAGNOSTICS</div>
+        <div class="modal-badge">🔬 STAT DIAGNOSTICS</div>
         <h2>Bedside Telemetry & Lab Panel</h2>
         <div id="lab-content-container" class="lab-grid"></div>
         <button class="btn-modal" onclick="closeLabModal()">CLOSE DIAGNOSTICS</button>
       </div>
     </div>
 
-    <!-- 8. Feature: Difficulty Selection Modal -->
     <div id="difficulty-modal" class="modal-overlay">
       <div class="modal-card difficulty-card">
-        <button class="modal-close-x" type="button" onclick="closeDifficultyModal()" aria-label="Close difficulty selection">×</button>
-        <div class="modal-badge">🚨 EMS INCOMING TRAUMA/MEDICAL NOTIFICATION</div>
+        <button class="modal-close-x" type="button" onclick="closeDifficultyModal()">×</button>
+        <div class="modal-badge">🚨 EMS INCOMING NOTIFICATION</div>
         <h2>Patient Intake Briefing</h2>
         <p id="difficulty-modal-info" class="modal-text">Patient admitted to the resuscitation bay.</p>
         <div class="modal-details-grid difficulty-details">
@@ -353,41 +255,25 @@
         <div class="difficulty-label">Choose Simulation Mode</div>
         <div class="difficulty-options">
           <button class="difficulty-option easy" onclick="confirmDifficultySelection('easy')">
-            <span class="difficulty-icon">🧭</span>
-            <span>Guided</span>
-            <strong>Quick action buttons enabled.</strong>
+            <span class="difficulty-icon">🧭</span><span>Guided</span><strong>Quick action buttons enabled.</strong>
           </button>
           <button class="difficulty-option hard" onclick="confirmDifficultySelection('hard')">
-            <span class="difficulty-icon">🎯</span>
-            <span>Expert</span>
-            <strong>Free-text orders only.</strong>
+            <span class="difficulty-icon">🎯</span><span>Expert</span><strong>Free-text orders only.</strong>
           </button>
         </div>
       </div>
     </div>
 
-    <!-- 9. Feature: Manual Case Conclusion Confirmation Modal -->
     <div id="abort-confirm-modal" class="modal-overlay">
       <div class="modal-card confirm-card">
         <div class="modal-badge">⚠️ CASE TERMINATION REQUEST</div>
         <h2>Conclude Simulation?</h2>
         <div class="modal-body">
-          <p class="modal-text">
-            This will stop the active resuscitation and generate the performance evaluation from the decisions recorded so far.
-          </p>
+          <p class="modal-text">This will stop the active resuscitation and generate the performance evaluation from the decisions recorded so far.</p>
           <div class="confirm-summary">
-            <div>
-              <span>Current Stage</span>
-              <strong id="confirm-stage">--</strong>
-            </div>
-            <div>
-              <span>Current HR</span>
-              <strong id="confirm-hr">-- bpm</strong>
-            </div>
-            <div>
-              <span>SpO2</span>
-              <strong id="confirm-spo2">--%</strong>
-            </div>
+            <div><span>Current Stage</span><strong id="confirm-stage">--</strong></div>
+            <div><span>Current HR</span><strong id="confirm-hr">-- bpm</strong></div>
+            <div><span>SpO2</span><strong id="confirm-spo2">--%</strong></div>
           </div>
         </div>
         <div class="modal-actions">
@@ -397,31 +283,26 @@
       </div>
     </div>
 
-    <!-- 10. Feature: Clinical Outcome Pop-up Modal -->
     <div id="outcome-modal" class="modal-overlay">
       <div class="modal-card">
         <div id="outcome-badge" class="modal-badge">🚨 CLINICAL OUTCOME NOTICE</div>
         <div id="outcome-icon" style="font-size: 3.2rem; margin: 10px 0;">⚡</div>
         <h2 id="outcome-title" style="margin-bottom: 12px; color: #fff;">Resuscitation Terminated</h2>
         <div class="modal-body">
-          <p id="outcome-desc" class="modal-text" style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 24px;">
-            Patient state has been determined.
-          </p>
+          <p id="outcome-desc" class="modal-text" style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 24px;">Patient state has been determined.</p>
           <div id="outcome-loading" class="outcome-loading" aria-live="polite">
             <span class="outcome-spinner" aria-hidden="true"></span>
             <span>Generating evaluation report</span>
             <span class="loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
           </div>
         </div>
-        <button id="outcome-proceed-btn" class="btn-modal" onclick="proceedToScorecard()">
-          VIEW FULL EVALUATION & JURY REPORT 📊
-        </button>
+        <button id="outcome-proceed-btn" class="btn-modal" onclick="proceedToScorecard()">VIEW FULL EVALUATION & JURY REPORT 📊</button>
       </div>
     </div>
     
   </div>
 
-  <script src="assets/js/config.js?v=20260829-02"></script>
-  <script src="assets/js/app.js?v=20260829-02"></script>
+  <script src="assets/js/config.js?v=20260829-09"></script>
+  <script src="assets/js/app.js?v=20260829-09"></script>
 </body>
 </html>
