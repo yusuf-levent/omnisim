@@ -264,3 +264,39 @@ input, textarea { user-select: text; }
 @media (max-width: 800px) {
   .profile-split-layout { grid-template-columns: 1fr; }
 }
+/* ==========================================================================
+   Guest Login Tooltip Animation
+   ========================================================================== */
+.guest-tooltip {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.35);
+  pointer-events: none;
+  animation: bounceTooltip 2.5s infinite;
+  z-index: 50;
+}
+.guest-tooltip::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  margin-left: -5px;
+  width: 10px;
+  height: 10px;
+  background: #8b5cf6;
+  transform: rotate(45deg);
+}
+@keyframes bounceTooltip {
+  0%, 20%, 50%, 80%, 100% { transform: translate(-50%, 0); }
+  40% { transform: translate(-50%, -6px); }
+  60% { transform: translate(-50%, -3px); }
+}

@@ -369,16 +369,21 @@ const screens = {
 function showScreen(name) {
   Object.values(screens).forEach((el) => el.classList.remove("active"));
   screens[name].classList.add("active");
+  
   const abortBtn = document.getElementById("btn-abort-session");
   const profileBtn = document.getElementById("btn-profile");
+  const guestTooltip = document.getElementById("guest-tooltip"); // Animasyonlu yazı
+  const profile = loadLearnerProfile();
 
   if (name === "sim") {
     abortBtn.style.display = "block";
     if (profileBtn) profileBtn.style.display = "none";
+    if (guestTooltip) guestTooltip.style.display = "none"; // Vaka sırasında animasyonu gizle
     initECGAnimation();
   } else {
     abortBtn.style.display = "none";
     if (profileBtn) profileBtn.style.display = "block";
+    if (guestTooltip) guestTooltip.style.display = profile.isSignedIn ? "none" : "block"; // Lobide misafirse göster
     stopECGAnimation();
   }
 }
@@ -723,6 +728,10 @@ function refreshLearnerIdentityUI() {
   if (navRole) navRole.textContent = dTrack;
   if (profileName) profileName.textContent = dName;
   if (profileTrack) profileTrack.textContent = dTrack;
+
+  // YENİ: Giriş yapıldıysa animasyonlu ipucunu gizle, misafirse göster
+  const guestTooltip = document.getElementById("guest-tooltip");
+  if (guestTooltip) guestTooltip.style.display = profile.isSignedIn ? "none" : "block";
 }
 
 function openLearnerLogin() {

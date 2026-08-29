@@ -15,7 +15,13 @@
         <div class="brand-title">OmniSim <span>AI</span></div>
       </div>
       <div class="nav-user">
-        <button id="btn-profile" class="btn-profile" onclick="openLearnerProfile()">🧠 PROFILE</button>
+        <!-- YENİ EKLENEN KISIM: Profile butonu bir wrapper içine alındı ve tooltip eklendi -->
+        <div style="position: relative; display: flex; align-items: center;">
+          <button id="btn-profile" class="btn-profile" onclick="openLearnerProfile()">🧠 PROFILE</button>
+          <div id="guest-tooltip" class="guest-tooltip">✨ Sign in to save progress & get AI tips!</div>
+        </div>
+        <!-- YENİ EKLENEN KISIM BİTTİ -->
+
         <button id="btn-audio-toggle" class="btn-audio" onclick="toggleAudio()">🔊 SOUND: <span id="audio-status">ON</span></button>
         <button id="btn-abort-session" class="btn-abort" onclick="abortSession()" style="display:none;">🛑 CONCLUDE & EVALUATE</button>
         <div class="status-indicator"><span class="live-dot"></span> SIMULATION ACTIVE</div>
@@ -27,6 +33,7 @@
           </div>
         </div>
       </div>
+
     </header>
 
     <section id="screen-select" class="screen active">
