@@ -1077,18 +1077,36 @@ document.getElementById("action-form").addEventListener("submit", (e) => {
   const msg = input.value.trim();
   if (msg && !isRequestInProgress) { input.value = ""; stopGameLoop(); logTimelineEvent("Custom Order", msg); sendActionToServer(msg); }
 });
-
 async function sendActionToServer(message) {
   if (!currentSessionId || isEndingSession || isRequestInProgress) return;
   isRequestInProgress = true; stopGameLoop(); setInteractionsDisabled(true);
 
   if (!message.startsWith("[")) appendLogEntry("user", message);
+  
   const loadingId = "loading-" + Date.now();
   const log = document.getElementById("chat-log");
   const loadingEntry = document.createElement("div");
-  loadingEntry.id = loadingId; loadingEntry.className = "log-entry sistem clinical-loading";
-  loadingEntry.innerHTML = `<span class="loading-pulse"></span><span class="loading-copy">⏳ Executing order...</span><span class="loading-dots"><i></i><i></i><i></i></span>`;
-  log.appendChild(loadingEntry); log.scrollTop = log.scrollHeight;
+  loadingEntry.id = loadingId; 
+  loadingEntry.className = "log-entry sistem clinical-loading";
+  
+  // İlk mesaj: Emir iletildi
+  loadingEntry.innerHTML = `<span class="loading-pulse"></span><span id="text-${loadingId}" class="loading-copy">⏳ Order transmitted to staff...</span><span class="loading-dots"><i></i><i></i><i></i></span>`;
+  log.appendChild(loadingEntry); 
+  log.scrollTop = log.scrollHeight;
+
+  // --- DÖNGÜ YOK: Sıralı ve Mantıksal İlerleme ---
+  const textSpan = document.getElementById(`text-${loadingId}`);
+  
+  // 1.5 saniye sonra: Müdahale yapılıyor
+  const timer1 = setTimeout(() => {
+    if (textSpan) textSpan.textContent = "💉 Administering intervention...";
+  }, 1500);
+
+  // 3.5 saniye sonra: Vücudun tepkisi bekleniyor (LLM gecikirse burada asılı kalır, çok doğal hissettirir)
+  const timer2 = setTimeout(() => {
+    if (textSpan) textSpan.textContent = "📈 Awaiting physiological response...";
+  }, 3500);
+  // ---------------------------------------------
 
   try {
     const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/act`), {
@@ -1096,14 +1114,26 @@ async function sendActionToServer(message) {
       body: JSON.stringify({ message, current_hr: Math.round(currentHeartRate), current_spo2: currentSpO2, current_bp: currentBP }),
     });
     if (!res.ok) throw new Error("Backend connection failed");
+    
+    // Yanıt gelince timer'ları iptal et ve loading'i sil
+    clearTimeout(timer1); 
+    clearTimeout(timer2);
     document.getElementById(loadingId)?.remove();
+    
+    // Yeni turu ekrana bas
     renderTurn(await res.json(), null, true);
+    
   } catch (err) {
+    clearTimeout(timer1); 
+    clearTimeout(timer2);
     document.getElementById(loadingId)?.remove();
-    appendLogEntry("sistem", `Action failed: ${err.message}`); startGameLoop();
-  } finally { isRequestInProgress = false; setInteractionsDisabled(false); }
+    appendLogEntry("sistem", `Action failed: ${err.message}`); 
+    startGameLoop();
+  } finally { 
+    isRequestInProgress = false; 
+    setInteractionsDisabled(false); 
+  }
 }
-
 function buildOutcomeCopy(report) {
   const badge = String(report?.status_badge || "");
   const errors = String(report?.errors || "");
@@ -1131,37 +1161,78 @@ async function finishSession() {
   const modalLoading = document.getElementById("outcome-loading");
   const proceedBtn = document.getElementById("outcome-proceed-btn");
 
+  // 1. ADIM: JÜRİYİ HİPNOTİZE EDEN TERMİNAL ARAYÜZÜNÜ BAŞLAT
   if (modalBadge) { modalBadge.style.color = "#38bdf8"; modalBadge.textContent = "📊 JURY EVALUATION IN PROGRESS"; }
-  if (modalIcon) modalIcon.textContent = "⏳";
-  if (modalTitle) modalTitle.textContent = "Generating Case Report";
-  if (modalDesc) modalDesc.textContent = "The simulator is reviewing the recorded interventions, timing, vital trends, and protocol adherence.";
+  if (modalIcon) modalIcon.textContent = "🤖";
+  if (modalTitle) modalTitle.textContent = "AI Mentor is Analyzing...";
+  
+  if (modalDesc) {
+    modalDesc.innerHTML = `
+      <style>
+        @keyframes termBlink { 50% { opacity: 0; } } 
+        .t-blink { animation: termBlink 1s step-start infinite; color: #38bdf8; font-weight: bold; }
+      </style>
+      <div style="text-align: left; background: rgba(15, 23, 42, 0.95); padding: 18px; border-radius: 12px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; border: 1px solid rgba(56, 189, 248, 0.3); box-shadow: inset 0 0 15px rgba(0,0,0,0.5); line-height: 1.6;">
+          <div id="term-1" style="color: #cbd5e1; margin-bottom: 8px;">> Extrapolating vital trends... <span style="color:#10b981; float:right;">[DONE]</span></div>
+          <div id="term-2" style="color: #38bdf8; margin-bottom: 8px;">> Cross-referencing AHA/ERC protocols<span class="t-blink">_</span></div>
+          <div id="term-3" style="color: #38bdf8; margin-bottom: 8px; display: none;">> Evaluating pharmacological choices<span class="t-blink">_</span></div>
+          <div id="term-4" style="color: #38bdf8; display: none;">> Compiling final OSCE scorecard<span class="t-blink">_</span></div>
+      </div>
+    `;
+
+    // Terminal satırlarını sırayla açan sahte zamanlayıcılar (İllüzyon burada gerçekleşiyor)
+    setTimeout(() => {
+        const t2 = document.getElementById("term-2");
+        const t3 = document.getElementById("term-3");
+        if (t2) { t2.innerHTML = `> Cross-referencing AHA/ERC protocols... <span style="color:#10b981; float:right;">[DONE]</span>`; t2.style.color = "#cbd5e1"; }
+        if (t3) t3.style.display = "block";
+    }, 2800);
+
+    setTimeout(() => {
+        const t3 = document.getElementById("term-3");
+        const t4 = document.getElementById("term-4");
+        if (t3) { t3.innerHTML = `> Evaluating pharmacological choices... <span style="color:#10b981; float:right;">[DONE]</span>`; t3.style.color = "#cbd5e1"; }
+        if (t4) t4.style.display = "block";
+    }, 6000);
+  }
+
   if (modalLoading) modalLoading.style.display = "flex";
   if (proceedBtn) proceedBtn.style.display = "none";
 
   document.getElementById("outcome-modal").classList.add("active");
 
   try {
+    // 2. ADIM: ARKA PLANDA ORİJİNAL LLM İSTEĞİNİ AT (Gerçek bekleme burada oluyor)
     const res = await fetchWithTimeout(apiUrl(`/session/${currentSessionId}/end`), { method: "POST" });
     if (!res.ok) throw new Error("Could not fetch evaluation report.");
     cachedReportData = await res.json();
 
+    // 3. ADIM: İSTEK BİTİNCE TERMİNALİ SİL, LLM'İN GERÇEK YANITINI EKRANA BAS
     const outcome = buildOutcomeCopy(cachedReportData);
     if(modalBadge) { modalBadge.style.color = outcome.color; modalBadge.textContent = outcome.badge; }
     if(modalIcon) modalIcon.textContent = outcome.icon;
     if(modalTitle) modalTitle.textContent = outcome.title;
-    if(modalDesc) modalDesc.textContent = outcome.desc;
+    
+    // Animasyonu silip yerine LLM'in yazdığı hata/başarı özetini yerleştiriyoruz
+    if(modalDesc) {
+        modalDesc.innerHTML = ""; 
+        modalDesc.textContent = outcome.desc; 
+    }
 
     if (modalLoading) modalLoading.style.display = "none";
     if (proceedBtn) proceedBtn.style.display = "block";
     playOutcomeAudio(outcome.successAudio);
+    
   } catch (err) {
     if (modalBadge) { modalBadge.style.color = "#ef4444"; modalBadge.textContent = "⚠️ EVALUATION FAILED"; }
     if (modalIcon) modalIcon.textContent = "⚠️";
     if (modalTitle) modalTitle.textContent = "Report Could Not Be Generated";
-    if (modalDesc) modalDesc.textContent = err.message;
+    if (modalDesc) { modalDesc.innerHTML = ""; modalDesc.textContent = err.message; }
     if (modalLoading) modalLoading.style.display = "none";
     if (proceedBtn) proceedBtn.style.display = "none";
-  } finally { isEndingSession = false; }
+  } finally { 
+    isEndingSession = false; 
+  }
 }
 
 function proceedToScorecard() {
