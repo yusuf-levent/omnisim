@@ -291,21 +291,66 @@ def act(session_id: str, action: ActionRequest, db: DBSession = Depends(get_db))
     db.add_all([vital, log])
     db.commit()
     return TurnResponse(session_id=session.id, turn_no=new_turn_no, age=int(result.get("age", 54)), gender=str(result.get("gender", "Male")), primary_diagnosis=str(result.get("primary_diagnosis", "Acute Coronary Syndrome")), patient_dialogue=result.get("patient_dialogue", ""), system_note=result.get("system_note", ""), heart_rate=hr_val, blood_pressure=bp_val, spo2=spo2_val, consciousness=cons_val, heart_rate_drift=float(result.get("heart_rate_drift", 0.4)), min_heart_rate=int(result.get("min_heart_rate", 35)), max_heart_rate=int(result.get("max_heart_rate", 185)), case_completed=case_completed)
-
 @app.post("/session/{session_id}/end", response_model=ReportResponse)
 def end_session(session_id: str, db: DBSession = Depends(get_db)):
     session = db.query(models.SimSession).filter_by(id=session_id).first()
     if not session: raise HTTPException(status_code=404, detail="Session not found")
+    
     existing_report = db.query(models.ReportResult).filter_by(session_id=session_id).first()
     if existing_report:
-        return ReportResponse(session_id=session_id, score=existing_report.score, status_badge=existing_report.status_badge or "COMPLETED", correct_actions=existing_report.correct_actions or 0, incorrect_actions=existing_report.incorrect_actions or 0, reaction_score=existing_report.reaction_score or 5, criteria=_criteria_from_report(existing_report), strengths=existing_report.strengths, errors=existing_report.errors, suggestions=existing_report.suggestions)
+        return ReportResponse(
+            session_id=session_id, 
+            score=existing_report.score, 
+            status_badge=existing_report.status_badge or "COMPLETED", 
+            correct_actions=existing_report.correct_actions or 0, 
+            incorrect_actions=existing_report.incorrect_actions or 0, 
+            reaction_score=existing_report.reaction_score or 5, 
+            criteria=_criteria_from_report(existing_report), 
+            strengths=existing_report.strengths, 
+            errors=existing_report.errors, 
+            suggestions=existing_report.suggestions
+        )
+        
     scenario = get_scenario(session.scenario_type)
     history = _report_history_from_logs(session)
-    try: result = llm_service.generate_report(scenario["prompt"], history)
-    except llm_service.LLMServiceError: result = _fallback_report(session)
+    
+    try: 
+        result = llm_service.generate_report(scenario["prompt"], history)
+    except llm_service.LLMServiceError: 
+        result = _fallback_report(session)
+        
     criteria = _clean_report_criteria(result.get("criteria", DEFAULT_REPORT_CRITERIA))
-    report = models.ReportResult(session_id=session_id, score=int(result.get("score", 0)), status_badge=str(result.get("status_badge", "COMPLETED")), correct_actions=int(result.get("correct_actions", 0)), incorrect_actions=int(result.get("incorrect_actions", 0)), reaction_score=int(result.get("reaction_score", 5)), criteria_json=json.dumps(criteria, ensure_ascii=False), strengths=str(result.get("strengths", "")), errors=str(result.get("errors", "")), suggestions=str(result.get("suggestions", "")))
+    
+    # GÜNCELLEME: LLM'in uydurma ihtimali olan skoru devreden çıkarıp
+    # sağ taraftaki puanı tam olarak 4 radar kriterinin toplamına eşitliyoruz.
+    calculated_score = sum(criteria.values())
+    
+    report = models.ReportResult(
+        session_id=session_id, 
+        score=calculated_score, # int(result.get("score", 0)) yerine bunu kullandık
+        status_badge=str(result.get("status_badge", "COMPLETED")), 
+        correct_actions=int(result.get("correct_actions", 0)), 
+        incorrect_actions=int(result.get("incorrect_actions", 0)), 
+        reaction_score=int(result.get("reaction_score", 5)), 
+        criteria_json=json.dumps(criteria, ensure_ascii=False), 
+        strengths=str(result.get("strengths", "")), 
+        errors=str(result.get("errors", "")), 
+        suggestions=str(result.get("suggestions", ""))
+    )
+    
     session.status = "finished"
     db.add(report)
     db.commit()
-    return ReportResponse(session_id=session_id, score=report.score, status_badge=report.status_badge, correct_actions=report.correct_actions, incorrect_actions=report.incorrect_actions, reaction_score=report.reaction_score, criteria=criteria, strengths=report.strengths, errors=report.errors, suggestions=report.suggestions)
+    
+    return ReportResponse(
+        session_id=session_id, 
+        score=report.score, 
+        status_badge=report.status_badge, 
+        correct_actions=report.correct_actions, 
+        incorrect_actions=report.incorrect_actions, 
+        reaction_score=report.reaction_score, 
+        criteria=criteria, 
+        strengths=report.strengths, 
+        errors=report.errors, 
+        suggestions=report.suggestions
+    )

@@ -23,7 +23,8 @@ def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 35
         + "2. All string values must be in medical English; address the user as Doctor.\n"
         + "3. Follow the active scenario's clinical rules and termination criteria exactly.\n"
         + "4. Keep patient_dialogue and system_note to one short sentence each.\n"
-        + "5. Do not end the case unless the active scenario's success or fatal criteria are met."
+        + "5. CRITICAL: NEVER set 'case_completed' to true prematurely. If the physician activates definitive care (e.g., Cath Lab, Surgery, ICU) early, DO NOT end the case. Keep 'case_completed' as false so they have time to administer prerequisite medications and labs.\n"
+        + "6. Acknowledge definitive care orders in 'system_note' (e.g., 'Cath lab team notified and prepping') but KEEP the simulation active until all pharmacological steps are addressed."
     )
     messages = [{"role": "system", "content": enforce_system}] + conversation
 
