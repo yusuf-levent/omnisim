@@ -78,6 +78,8 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     Do NOT use Turkish under any circumstances.
     Use the GROUND-TRUTH ACTION AUDIT TRAIL in the conversation as the authoritative source of physician actions.
     Never criticize the physician for omitting an intervention that appears in that audit trail.
+    The overall 'score' MUST exactly equal the sum of the four 'criteria' fields. Each criterion is out of 25. 
+    If you identify any omitted medications in the 'errors' section, you MUST deduct points from 'pharmacology_precision' and 'protocol_adherence'.
 
     OUTPUT FORMAT (JSON ONLY - ALL TEXT IN ENGLISH):
     {
