@@ -1,8 +1,8 @@
-"""init
+"""init_schema
 
-Revision ID: 31183d6f350d
+Revision ID: 2fd6424ff999
 Revises: 
-Create Date: 2026-08-29 11:02:03.207764
+Create Date: 2026-08-30 17:42:47.466980
 """
 from typing import Sequence, Union
 
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = '31183d6f350d'
+revision: str = '2fd6424ff999'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -21,13 +21,15 @@ def upgrade() -> None:
     op.create_table('learner_profiles',
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('username', sa.String(), nullable=False),
+    sa.Column('email', sa.String(), nullable=True),
+    sa.Column('password_hash', sa.String(), nullable=True),
     sa.Column('display_name', sa.String(), nullable=False),
-    sa.Column('training_track', sa.String(), nullable=True),
     sa.Column('ai_recommendations', sa.Text(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_learner_profiles_email'), 'learner_profiles', ['email'], unique=True)
     op.create_index(op.f('ix_learner_profiles_username'), 'learner_profiles', ['username'], unique=True)
     op.create_table('sim_sessions',
     sa.Column('id', sa.String(), nullable=False),
@@ -95,5 +97,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_sim_sessions_learner_id'), table_name='sim_sessions')
     op.drop_table('sim_sessions')
     op.drop_index(op.f('ix_learner_profiles_username'), table_name='learner_profiles')
+    op.drop_index(op.f('ix_learner_profiles_email'), table_name='learner_profiles')
     op.drop_table('learner_profiles')
     # ### end Alembic commands ###
