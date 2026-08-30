@@ -104,37 +104,39 @@ def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
     conversation = history + [{"role": "user", "content": report_instruction}]
     return _call_llm(scenario_prompt, conversation, max_tokens=800)
 
-# GÜNCELLENDİ: Hem Senaryo Hem Çalışma Konusu Üretiyor
-def generate_profile_recommendations(history: list[dict], available_scenarios: list[dict]) -> dict:
-    instruction = f"""
-    You are an expert medical educator and AI Mentor. 
-    Analyze this resident's recent clinical simulation performance history (scores and specific clinical errors).
-    Based strictly on their weaknesses, select EXACTLY 2 cases from the AVAILABLE SCENARIOS list that will best advance their training.
-    Additionally, provide exactly 3 medical STUDY TOPICS (guidelines, pathophysiology, or pharmacology topics) they should review.
+
+def generate_report(scenario_prompt: str, history: list[dict]) -> dict:
+    report_instruction = """
+    The clinical simulation has ended. You MUST evaluate the physician's clinical performance STRICTLY IN ENGLISH according to rigorous international OSCE rubrics (AHA, ERC, BTS, GINA, SSC, ATLS).
+    Do NOT use Turkish under any circumstances.
+    Use the GROUND-TRUTH ACTION AUDIT TRAIL in the conversation as the authoritative source of physician actions.
+    Never criticize the physician for omitting an intervention that appears in that audit trail.
     
-    AVAILABLE SCENARIOS:
-    {json.dumps(available_scenarios)}
-    
-    LEARNER HISTORY:
-    {json.dumps(history)}
-    
-    OUTPUT FORMAT (Strict JSON):
-    {{
-      "recommendations": [
-        {{
-          "scenario_id": "exact_id_from_available_scenarios",
-          "title": "Scenario Label",
-          "category": "Focus Area",
-          "reason": "Pedagogical reason addressing a specific weakness.",
-          "difficulty": "Intermediate"
-        }}
-      ],
-      "study_topics": [
-        "AHA ACLS Guidelines for Bradycardia",
-        "Pharmacokinetics of Vasopressors",
-        "Recognition of Tension Pneumothorax"
-      ]
-    }}
+    CRITICAL NEW RULE ON FINAL PATIENT OUTCOME:
+    Evaluate the patient's FINAL vitals and clinical status at the exact moment the simulation ended.
+    If the physician ended the case PREMATURELY while the patient was still hemodynamically unstable, hypoxic, or symptomatic, you MUST heavily penalize 'patient_safety' and 'protocol_adherence' (e.g., deduct 10-15 points). 
+    You must explicitly state in the 'errors' section: "Premature termination: The case was concluded before the patient clinically stabilized." even if all correct medications were ordered.
+
+    The overall 'score' MUST exactly equal the sum of the four 'criteria' fields. Each criterion is out of 25. 
+    If you identify any omitted medications in the 'errors' section, you MUST deduct points from 'pharmacology_precision' and 'protocol_adherence'.
+
+    OUTPUT FORMAT (JSON ONLY - ALL TEXT IN ENGLISH):
+    {
+      "score": int,
+      "status_badge": "OUTSTANDING | COMPETENT | NEEDS IMPROVEMENT | CRITICAL FAILURE (ARREST)",
+      "correct_actions": int,
+      "incorrect_actions": int,
+      "reaction_score": int,
+      "criteria": {
+        "protocol_adherence": int,
+        "diagnostic_accuracy": int,
+        "patient_safety": int,
+        "pharmacology_precision": int
+      },
+      "strengths": "Concise analysis of correct interventions strictly in English.",
+      "errors": "Strict critique of omitted steps or premature termination strictly in English.",
+      "suggestions": "Actionable guideline recommendations strictly in English."
+    }
     """
-    conversation = [{"role": "user", "content": "Analyze my history and provide recommendations and study topics strictly in JSON."}]
-    return _call_llm(instruction, conversation, max_tokens=1000)
+    conversation = history + [{"role": "user", "content": report_instruction}]
+    return _call_llm(scenario_prompt, conversation, max_tokens=800)
