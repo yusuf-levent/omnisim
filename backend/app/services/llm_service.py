@@ -25,6 +25,7 @@ def _call_llm(system_prompt: str, conversation: list[dict], max_tokens: int = 35
         + "4. Keep patient_dialogue and system_note to one short sentence each.\n"
         + "5. CRITICAL: NEVER set 'case_completed' to true prematurely. If the physician activates definitive care (e.g., Cath Lab, Surgery, ICU) early, DO NOT end the case. Keep 'case_completed' as false so they have time to administer prerequisite medications and labs.\n"
         + "6. Acknowledge definitive care orders in 'system_note' (e.g., 'Cath lab team notified and prepping') but KEEP the simulation active until all pharmacological steps are addressed."
+        + "7. STABILIZATION: If the physician administers correct treatments, adjust 'heart_rate_drift' to stabilize the patient. Set it to 0.0 to stop deterioration, or use a value that moves the HR towards a healthy baseline (e.g., negative for tachycardia, positive for bradycardia)."
     )
     messages = [{"role": "system", "content": enforce_system}] + conversation
 

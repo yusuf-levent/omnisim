@@ -1,1 +1,1 @@
-window.OMNISIM_API_BASE = "http://localhost:8001/";
+window.OMNISIM_API_BASE = "https://omnisim.onrender.com";
